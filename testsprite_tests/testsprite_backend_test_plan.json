@@ -1,0 +1,22 @@
+[
+  {
+    "id": "TC001",
+    "title": "get health check status",
+    "description": "Test the GET /api/health endpoint to verify the server and dependencies are healthy. Expect a 200 response with status 'ok' and a valid ISO8601 time string. Also test failure scenario with 500 response and error message when database is unreachable."
+  },
+  {
+    "id": "TC002",
+    "title": "post referral link user and grant reward",
+    "description": "Test the POST /api/referral endpoint to link a user with a referral code and grant rewards. Verify success response with referrerId for valid codes. Test failure cases for duplicate referrals, invalid codes, and self-referrals returning appropriate 400 errors."
+  },
+  {
+    "id": "TC003",
+    "title": "get siwe nonce for authentication",
+    "description": "Test the GET /api/auth/nonce endpoint to retrieve a nonce string for SIWE wallet authentication. Expect a 200 response with a nonce string."
+  },
+  {
+    "id": "TC004",
+    "title": "post verify siwe signature",
+    "description": "Test the POST /api/auth/verify endpoint to verify SIWE wallet signature. Provide valid message and signature to receive 200 true and HTTP-only JWT cookie. Test invalid or tampered message/signature to receive 401 false."
+  }
+]

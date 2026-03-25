@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(uuid())
+  email          String?   @unique
+  walletAddress  String?   @unique
+  githubId       String?   @unique
+  discordId      String?   @unique
+  twitterId      String?   @unique
+  role           Role      @default(USER)
+  referralCode   String    @unique @default(uuid())
+  referredById   String?
+  referredBy     User?     @relation("Referrals", fields: [referredById], references: [id])
+  referrals      User[]    @relation("Referrals")
+  rewardsEarned  ReferralReward[] @relation("RewardReferrer")
+  rewardsGiven   ReferralReward[] @relation("RewardReferee")
+  points         Float     @default(0.0)
+  tasksCompleted TaskCompletion[]
+  miningSessions MiningSession[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model TaskCompletion {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  taskId    String
+  completedAt DateTime @default(now())
+  @@unique([userId, taskId])
+}
+
+model MiningSession {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  pointsEarned Float   @default(0.0)
+  isActive    Boolean  @default(true)
+}
+
+model ReferralReward {
+  id            String   @id @default(uuid())
+  referrerId    String
+  referrer      User     @relation("RewardReferrer", fields: [referrerId], references: [id])
+  refereeId     String
+  referee       User     @relation("RewardReferee", fields: [refereeId], references: [id])
+  amount        Float    @default(0.0)
+  createdAt     DateTime @default(now())
+}
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String   @db.Text
+  expiresAt DateTime
+}
+
+enum Role {
+  USER
+  ADMIN
+}
