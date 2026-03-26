@@ -1,6 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import '@rainbow-me/rainbowkit/styles.css';
+import React, { useState, useEffect, Suspense } from 'react';
+
+const ConnectButton = React.lazy(async () => {
+  try {
+    const rm = await import('@rainbow-me/rainbowkit');
+    return { default: rm.ConnectButton as any };
+  } catch (err) {
+    return { default: (() => <button className="px-4 py-2 bg-red-900/50 text-red-200 text-xs rounded border border-red-500/50">Wallet Unavailable</button>) as any };
+  }
+});
+
 import { 
   LayoutDashboard, 
   Trophy, 
@@ -263,7 +271,9 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
             
             {/* Wallet Connect */}
             <div className="mb-3">
-              <ConnectButton />
+              <Suspense fallback={<div className="h-10 w-full bg-white/5 animate-pulse rounded-lg" />}>
+                <ConnectButton />
+              </Suspense>
             </div>
 
             {/* Google */}
