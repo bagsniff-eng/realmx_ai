@@ -15,6 +15,24 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      chunkSizeWarningLimit: 1500,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('@rainbow-me/rainbowkit') || id.includes('wagmi') || id.includes('viem')) {
+                return 'web3-vendor';
+              }
+              if (id.includes('react') || id.includes('react-dom') || id.includes('motion')) {
+                return 'react-vendor';
+              }
+              return 'vendor';
+            }
+          }
+        }
+      }
+    },
     server: {
       proxy: {
         '/api': {
