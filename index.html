@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>REALMxAI Node Dashboard</title>
+    <link rel="icon" type="image/webp" href="/le6jxytl.webp" />
+    <!-- Node.js global polyfills required by Web3 libraries (wagmi, viem, rainbowkit) -->
+    <script>
+      window.global = window;
+      window.process = window.process || { env: {}, browser: true };
+      window.Buffer = window.Buffer || { isBuffer: function() { return false; } };
+    </script>
   </head>
   <body>
     <div id="root"></div>
