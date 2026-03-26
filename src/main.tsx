@@ -4,6 +4,20 @@ import App from './App.tsx';
 import './index.css';
 import { Providers } from './Providers.tsx';
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (e) => {
+    document.body.innerHTML = `<div style="padding: 20px; color: red; background: black; z-index: 9999; position: absolute; inset: 0; font-family: monospace;"><h1>Global Error Catch</h1><pre>${e.message}\\n${e.error?.stack || ''}</pre></div>`;
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    document.body.innerHTML = `<div style="padding: 20px; color: #ff55aa; background: black; z-index: 9999; position: absolute; inset: 0; font-family: monospace;"><h1>Unhandled Promise Rejection</h1><pre>${e.reason?.message || e.reason}\\n${e.reason?.stack || ''}</pre></div>`;
+  });
+}
+
+const rootEl = document.getElementById('root');
+if (rootEl && rootEl.innerHTML === '') {
+  rootEl.innerHTML = '<div style="color: #3DF2E0; padding: 20px; font-family: monospace;">[1] Bootstrapping Application... (If stuck here, React failed to mount)</div>';
+}
+
 class AppErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null }
