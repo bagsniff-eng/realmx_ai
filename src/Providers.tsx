@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const config = getDefaultConfig({
   appName: 'REALMxAI Node Dashboard',
-  projectId: 'YOUR_PROJECT_ID', // Replaced with dummy value as requested by standard patterns if not provided
+  projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '87106bbca1a3afbb8a6baea1a4fb42bc', // Valid 32-char hex fallback
   chains: [mainnet],
   ssr: true, // If your app supports SSR
 });
