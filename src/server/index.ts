@@ -10,7 +10,7 @@ import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import { prisma } from './db.js';
 import passport, { authRoutes } from './auth.js';
 import { logger, morganMiddleware } from './logger.js';
-import xss from 'xss-clean';
+// xss-clean removed (deprecated) — use input validation per-route instead
 import referralRoutes from './referral.js';
 import userRoutes from './users.js';
 import tasksRoutes from './tasks.js';
@@ -47,16 +47,17 @@ setupAdmin(app).then((admin) => {
 }).catch(e => console.error("AdminJS init failed", e));
 
 // Body parsers
-app.use(express.json());
-app.use(xss());
+app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate Limiting
+// Rate Limiting — generous for SPA with many parallel API calls
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
-app.use(limiter);
+app.use('/api/', limiter);
 
 // App Session
 app.use(session({

@@ -18,7 +18,9 @@ import {
   ShieldCheck,
   Zap,
   ArrowUpRight,
-  Search
+  Search,
+  Menu,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -94,6 +96,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: any) => (
 );
 
 const Sidebar = ({ activeTab, setActiveTab }: { activeTab: string, setActiveTab: (t: string) => void }) => {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const menuItems = [
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
     { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
@@ -106,59 +109,102 @@ const Sidebar = ({ activeTab, setActiveTab }: { activeTab: string, setActiveTab:
   ];
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-60 bg-realm-black border-r border-realm-border flex flex-col z-50">
-      <div className="flex items-center gap-3 h-20 px-6 border-b border-realm-border">
-        <div className="w-8 h-8 bg-realm-surface border border-realm-border rounded flex items-center justify-center overflow-hidden">
-          <img 
-            src="/ChatGPT Image Mar 15, 2026, 09_59_46 AM.webp" 
-            alt="REALMxAI Logo" 
-            className="w-full h-full object-cover grayscale opacity-80"
-            referrerPolicy="no-referrer"
-          />
+    <>
+      {/* Mobile hamburger button */}
+      <button 
+        onClick={() => setMobileOpen(!mobileOpen)}
+        className="md:hidden fixed top-5 left-4 z-[60] w-10 h-10 bg-realm-surface border border-realm-border rounded-lg flex items-center justify-center text-white/60 hover:text-white"
+      >
+        {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+      </button>
+
+      {/* Backdrop */}
+      {mobileOpen && <div className="md:hidden fixed inset-0 bg-black/60 z-40" onClick={() => setMobileOpen(false)} />}
+
+      <aside className={cn(
+        "fixed left-0 top-0 h-screen w-60 bg-realm-black border-r border-realm-border flex flex-col z-50 transition-transform duration-300",
+        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}>
+        <div className="flex items-center gap-3 h-20 px-6 border-b border-realm-border">
+          <div className="w-8 h-8 bg-realm-surface border border-realm-border rounded flex items-center justify-center overflow-hidden">
+            <img 
+              src="/le6jxytl.webp" 
+              alt="REALMxAI Logo" 
+              className="w-full h-full object-cover grayscale opacity-80"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <span className="font-mono text-sm font-bold tracking-tighter text-realm-text-primary">REALMxAI</span>
         </div>
-        <span className="font-mono text-sm font-bold tracking-tighter text-realm-text-primary">REALMxAI</span>
-      </div>
 
-      <nav className="flex-1 py-6">
-        {menuItems.map((item) => (
-          <SidebarItem
-            key={item.id}
-            icon={item.icon}
-            label={item.label}
-            active={activeTab === item.id}
-            onClick={() => setActiveTab(item.id)}
-          />
-        ))}
-      </nav>
+        <nav className="flex-1 py-6">
+          {menuItems.map((item) => (
+            <SidebarItem
+              key={item.id}
+              icon={item.icon}
+              label={item.label}
+              active={activeTab === item.id}
+              onClick={() => { setActiveTab(item.id); setMobileOpen(false); }}
+            />
+          ))}
+        </nav>
 
-      <div className="mt-auto pb-6 border-t border-realm-border pt-4">
-        <SidebarItem icon={Settings} label="SETTINGS" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
-      </div>
-    </aside>
+        <div className="mt-auto pb-6 border-t border-realm-border pt-4">
+          <SidebarItem icon={Settings} label="SETTINGS" active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setMobileOpen(false); }} />
+        </div>
+      </aside>
+    </>
   );
 };
 
 const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
-  const [user, setUser] = useState<{ email?: string; walletAddress?: string; githubId?: string; discordId?: string; twitterId?: string; } | null>(null);
+  const [user, setUser] = useState<{ email?: string; walletAddress?: string; githubId?: string; discordId?: string; twitterId?: string; id?: string; referralCode?: string; name?: string; avatarUrl?: string } | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [topBarPoints, setTopBarPoints] = useState(0);
+  const [notifications, setNotifications] = useState<{id: string; text: string; time: string; read: boolean}[]>([]);
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        const res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setUser(data);
+          // Add welcome notification
+          setNotifications(prev => {
+            if (prev.some(n => n.id === 'welcome')) return prev;
+            return [{ id: 'welcome', text: `Welcome back${data.name ? ', ' + data.name : ''}! Your node is operational.`, time: 'just now', read: false }, ...prev];
+          });
         }
       } catch (err) { }
     };
     fetchUser();
   }, []);
 
+  // Fetch real wallet balance
+  useEffect(() => {
+    const fetchBalance = async () => {
+      try {
+        const res = await fetch('/api/wallet/balance-public', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setTopBarPoints(data.balance || 0);
+        }
+      } catch (e) { }
+    };
+    fetchBalance();
+    const t = setInterval(fetchBalance, 30000);
+    // Listen for balance-updated events (e.g. after mining stop)
+    const onBalanceUpdated = () => fetchBalance();
+    window.addEventListener('balance-updated', onBalanceUpdated);
+    return () => { clearInterval(t); window.removeEventListener('balance-updated', onBalanceUpdated); };
+  }, []);
+
   const isIdentityConnected = !!(user?.email || user?.walletAddress);
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <header className="fixed top-0 right-0 left-60 h-20 border-b border-realm-border bg-realm-black/80 backdrop-blur-sm z-40 px-8 flex items-center justify-between">
+    <header className="fixed top-0 right-0 left-0 md:left-60 h-20 border-b border-realm-border bg-realm-black/80 backdrop-blur-sm z-40 px-4 md:px-8 flex items-center justify-between">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-realm-text-secondary text-[10px] font-mono tracking-widest uppercase">
           <div className="w-1.5 h-1.5 bg-realm-cyan rounded-full opacity-80" />
@@ -169,13 +215,39 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-3 px-3 py-1.5 bg-realm-surface border border-realm-border rounded-md">
           <Wallet size={14} className="text-realm-text-secondary" />
-          <span className="text-xs font-mono font-medium text-realm-text-primary">Points: <span id="pointsval">230.45</span> REALM-P</span>
+          <span className="text-xs font-mono font-medium text-realm-text-primary">Points: <span className="text-realm-cyan">{topBarPoints.toFixed(2)}</span> REALM-P</span>
         </div>
         
-        <button className="p-2 text-realm-text-secondary hover:text-realm-text-primary transition-colors relative">
-          <Bell size={18} />
-          <span className="absolute top-2 right-2 w-1 h-1 bg-realm-cyan rounded-full" />
-        </button>
+        <div className="relative">
+          <button 
+           onClick={() => { setNotificationsOpen(!notificationsOpen); if (!notificationsOpen) setNotifications(prev => prev.map(n => ({...n, read: true}))); }}
+           className="p-2 text-realm-text-secondary hover:text-realm-text-primary transition-colors relative"
+          >
+            <Bell size={18} />
+            {unreadCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-realm-cyan rounded-full animate-pulse" />}
+          </button>
+          
+          {notificationsOpen && (
+            <div className="absolute top-full mt-4 right-0 w-72 p-4 bg-realm-black border border-realm-border rounded-xl shadow-2xl z-50">
+              <div className="text-[10px] font-mono font-bold text-realm-text-secondary tracking-widest uppercase mb-3">Notifications {unreadCount > 0 && <span className="text-realm-cyan ml-1">({unreadCount})</span>}</div>
+              {notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <Bell size={24} className="text-white/20 mb-2" />
+                  <p className="text-xs text-white/40">No new notifications</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {notifications.map(n => (
+                    <div key={n.id} className={cn("p-3 rounded-lg border text-xs", n.read ? "border-white/5 bg-white/2" : "border-realm-cyan/20 bg-realm-cyan/5")}>
+                      <p className="text-white/80">{n.text}</p>
+                      <p className="text-white/30 text-[10px] font-mono mt-1">{n.time}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-3 pl-6 border-l border-realm-border relative group">
           <button
@@ -202,11 +274,11 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
                     <p className="text-[10px] text-white/40 font-mono uppercase mb-0.5">Google</p>
                     <span className="text-xs text-realm-text-primary break-all">{user.email}</span>
                   </div>
-                  <a href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/logout`} className="text-[10px] font-bold text-red-400 hover:text-red-300 transition-colors shrink-0">Sign Out</a>
+                  <a href={`${''}/api/auth/logout`} className="text-[10px] font-bold text-red-400 hover:text-red-300 transition-colors shrink-0">Sign Out</a>
                 </div>
               ) : (
                 <a 
-                  href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/google`}
+                  href={`${''}/api/auth/google`}
                   className="w-full text-center px-4 py-2.5 rounded-lg bg-white text-realm-black text-xs font-bold hover:bg-realm-cyan transition-colors"
                 >
                   Link Google Account
@@ -226,7 +298,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
                   </div>
                 </div>
               ) : (
-                <a href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/twitter`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-colors">
+                <a href={`${''}/api/auth/twitter`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-colors">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.258 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
                   Connect X (Twitter)
                 </a>
@@ -240,7 +312,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
                   </div>
                 </div>
               ) : (
-                <a href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/github`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-colors">
+                <a href={`${''}/api/auth/github`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-colors">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
                   Connect GitHub
                 </a>
@@ -254,7 +326,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
                   </div>
                 </div>
               ) : (
-                <a href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/discord`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-colors">
+                <a href={`${''}/api/auth/discord`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-colors">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.33-.35-.76-.53-1.09a.09.09 0 0 0-.07-.03c-1.5.26-2.94.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06-.01.07-.04.4-.55.76-1.13 1.07-1.74a.08.08 0 0 0-.04-.12c-.57-.22-1.11-.48-1.64-.78a.09.09 0 0 1-.01-.15c.11-.08.22-.17.33-.25a.08.08 0 0 1 .08-.01c3.44 1.57 7.15 1.57 10.55 0a.08.08 0 0 1 .08.01c.11.08.22.17.33.26a.09.09 0 0 1-.01.15c-.53.3-1.07.56-1.64.78a.08.08 0 0 0-.04.12c.31.61.67 1.19 1.07 1.74.01.03.04.05.07.04 1.71-.53 3.44-1.33 5.24-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.03-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z"/></svg>
                   Connect Discord
                 </a>
@@ -288,19 +360,37 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
             />
             <span id="ref-error" style={{display: 'none'}} className="text-xs text-red-400">Referral code invalid or already used</span>
           </div>
-          <button 
-           onClick={() => {
-             const val = (document.getElementById('ref-input') as HTMLInputElement).value;
-             if (val.trim() === 'ABUSED-CODE-000' || val.trim() === 'BADCODE') {
-               const err = document.getElementById('ref-error');
-               if (err) err.style.display = 'block';
-             } else {
-               const err = document.getElementById('ref-error');
-               if (err) err.style.display = 'none';
-               document.getElementById('signup-modal')?.classList.add('hidden');
-             }
-           }}
-           className="w-full mt-2 bg-realm-cyan text-realm-black py-2.5 rounded font-bold hover:bg-[#25c4b3]"
+           <button 
+            onClick={async () => {
+              const val = (document.getElementById('ref-input') as HTMLInputElement).value;
+              if (val.trim() === 'ABUSED-CODE-000' || val.trim() === 'BADCODE') {
+                const err = document.getElementById('ref-error');
+                if (err) err.style.display = 'block';
+              } else {
+                if (val.trim().length > 0 && user?.id) {
+                    try {
+                        const res = await fetch('/api/referral', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ code: val.trim(), userId: user.id })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            const err = document.getElementById('ref-error');
+                            if (err) {
+                                err.innerText = data.error || 'Invalid code';
+                                err.style.display = 'block';
+                            }
+                            return;
+                        }
+                    } catch (e) {}
+                }
+                const err = document.getElementById('ref-error');
+                if (err) err.style.display = 'none';
+                document.getElementById('signup-modal')?.classList.add('hidden');
+              }
+            }}
+            className="w-full mt-2 bg-realm-cyan text-realm-black py-2.5 rounded font-bold hover:bg-[#25c4b3]"
           >
             Continue
           </button>
@@ -310,27 +400,51 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
   );
 };
 
-const Dashboard = ({ miningActive, sessionSecs, onToggleMining }: { miningActive: boolean; sessionSecs: number; onToggleMining: () => void }) => {
-  const [usersOnline, setUsersOnline] = useState(12435);
+const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { miningActive: boolean; sessionSecs: number; onToggleMining: () => void; onNavigate: (tab: string) => void }) => {
+  const [networkStats, setNetworkStats] = useState({ totalUsers: 0, activeSessions: 0, totalPointsMined: 0 });
   const [points, setPoints] = useState(0);
+  const [timeframe, setTimeframe] = useState('24H');
+  const [chartData, setChartData] = useState<{t: string; v: number}[]>([]);
 
   useEffect(() => {
     const fetchPoints = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        const res = await fetch(`${API_URL}/api/wallet/balance`, { credentials: 'include' });
+        const res = await fetch('/api/wallet/balance-public', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setPoints(data.balance);
         }
       } catch (e) {}
     };
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/users/stats');
+        if (res.ok) setNetworkStats(await res.json());
+      } catch (e) {}
+    };
     fetchPoints();
-    const t = setInterval(() => {
-      setUsersOnline(prev => prev + Math.floor(Math.random() * 5) - 2);
-    }, 5000);
+    fetchStats();
+    const t = setInterval(fetchStats, 30000);
     return () => clearInterval(t);
   }, []);
+
+  // Fetch chart data based on timeframe
+  useEffect(() => {
+    const periodMap: Record<string, string> = { '24H': '24h', '7D': '7d', 'ALL': '30d' };
+    const fetchChart = async () => {
+      try {
+        const res = await fetch(`/api/mining/earnings?period=${periodMap[timeframe]}`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setChartData(data.map((d: any) => ({ t: d.date.slice(5), v: d.earned })));
+        }
+      } catch (e) {
+        // If not logged in, show empty chart
+        setChartData([]);
+      }
+    };
+    fetchChart();
+  }, [timeframe]);
 
   const fTime = (sec: number) => {
     const h = Math.floor(sec / 3600);
@@ -464,10 +578,10 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining }: { miningActive
           
           <div className="pt-10 space-y-4">
              <div className="flex justify-between items-center text-[10px] font-mono">
-               <span className="text-white/30 uppercase">Weekly Yield</span>
-               <span className="text-realm-cyan">+12.4%</span>
+               <span className="text-white/30 uppercase">Mining Rate</span>
+               <span className="text-realm-cyan">+{MINING_RATE_PER_HOUR}/hr</span>
              </div>
-             <button className="w-full py-2.5 border border-realm-border rounded-md text-[10px] font-mono font-bold text-realm-text-secondary uppercase tracking-widest hover:border-white/15 hover:text-realm-text-primary transition-colors">
+             <button onClick={() => onNavigate('wallet')} className="w-full py-2.5 border border-realm-border rounded-md text-[10px] font-mono font-bold text-realm-text-secondary uppercase tracking-widest hover:border-white/15 hover:text-realm-text-primary transition-colors">
                 Manage Wallet
              </button>
           </div>
@@ -482,39 +596,44 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining }: { miningActive
              </div>
              <div className="flex gap-2">
                {['24H', '7D', 'ALL'].map(t => (
-                 <button key={t} className="px-3 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] font-mono text-white/40 hover:text-white transition-all">
+                 <button 
+                   key={t}
+                   onClick={() => setTimeframe(t)}
+                   className={cn(
+                     "px-3 py-1 rounded-md border text-[10px] font-mono transition-all",
+                     timeframe === t 
+                       ? "bg-realm-cyan/20 border-realm-cyan text-realm-cyan" 
+                       : "bg-white/5 border-white/10 text-white/40 hover:text-white"
+                   )}
+                 >
                    {t}
                  </button>
                ))}
              </div>
            </div>
-           
-           <div className="h-[240px] w-full">
-             <ResponsiveContainer width="100%" height="100%">
-               <AreaChart data={[
-                 { t: '00', v: 40 }, { t: '04', v: 30 }, { t: '08', v: 65 }, { t: '12', v: 45 }, { t: '16', v: 90 }, { t: '20', v: 55 }, { t: '24', v: 70 }
-               ]}>
-                  <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                  <XAxis dataKey="t" hide />
-                  <YAxis hide />
-                  <Area type="monotone" dataKey="v" stroke="#2FE6D2" fillOpacity={0} fill="transparent" strokeWidth={1.5} />
-               </AreaChart>
-             </ResponsiveContainer>
-           </div>
+                <div className="h-[240px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData.length > 0 ? chartData : [{ t: 'Now', v: 0 }]}>
+                   <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                   <XAxis dataKey="t" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }} />
+                   <YAxis hide />
+                   <Area type="monotone" dataKey="v" stroke="#2FE6D2" fillOpacity={0.1} fill="#2FE6D2" strokeWidth={1.5} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
 
-           <div className="grid grid-cols-4 gap-8 mt-8 pt-8 border-t border-white/5">
-             {[
-               { label: 'Active Peers', value: '1,244' },
-               { label: 'Blocks Verified', value: '124,103' },
-               { label: 'Network Latency', value: '24ms' },
-               { label: 'Uptime', value: '99.9%' },
-             ].map(s => (
-               <div key={s.label}>
-                 <p className="text-[10px] text-white/30 font-mono uppercase mb-1">{s.label}</p>
-                 <p className="text-sm font-bold text-white/80">{s.value}</p>
-               </div>
-             ))}
-           </div>
+            <div className="grid grid-cols-4 gap-8 mt-8 pt-8 border-t border-white/5">
+              {[
+                { label: 'Active Miners', value: networkStats.activeSessions.toLocaleString() },
+                { label: 'Total Users', value: networkStats.totalUsers.toLocaleString() },
+                { label: 'Total Mined', value: `${networkStats.totalPointsMined.toFixed(1)} REALM` },
+                { label: 'Network Status', value: 'Optimal' },
+              ].map(s => (
+                <div key={s.label}>
+                  <p className="text-[10px] text-white/30 font-mono uppercase mb-1">{s.label}</p>
+                  <p className="text-sm font-bold text-white/80">{s.value}</p>
+                </div>
+              ))}        </div>
         </div>
       </div>
     </div>
@@ -526,8 +645,7 @@ const TasksPage = () => {
 
   const fetchTasks = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const res = await fetch(`${API_URL}/api/tasks`, { credentials: 'include' });
+      const res = await fetch('/api/tasks', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setTasks(data);
@@ -549,8 +667,7 @@ const TasksPage = () => {
     }
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const res = await fetch(`${API_URL}/api/tasks/complete`, {
+      const res = await fetch('/api/tasks/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId: task.id }),
@@ -714,12 +831,22 @@ const ReferralsPage = () => {
   const [referrals, setReferrals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [referralCode, setReferralCode] = useState('REALM-ALPHA-??');
+  const [showAllReferrals, setShowAllReferrals] = useState(false);
+
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy', err);
+    }
+  };
 
   useEffect(() => {
     const fetchReferrals = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        const res = await fetch(`${API_URL}/api/referrals`, { credentials: 'include' });
+        const res = await fetch('/api/referral', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setReferrals(data.referrals || []);
@@ -776,13 +903,10 @@ const ReferralsPage = () => {
                 <code className="text-xl font-medium tracking-widest">{referralCode}</code>
               </div>
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(referralCode);
-                  setCopied(true); setTimeout(() => setCopied(false), 2000);
-                }}
+                onClick={() => handleCopy(referralCode)}
                 className="px-6 py-2 bg-white text-realm-black rounded-lg text-xs font-bold hover:bg-realm-cyan transition-all"
               >
-                {copied ? 'âœ“ Copied' : 'Share Code'}
+                {copied ? '✓ Copied' : 'Share Code'}
               </button>
             </div>
           </div>
@@ -830,7 +954,7 @@ const ReferralsPage = () => {
               ))}
             </div>
           )}
-          <button className="w-full py-3 mt-8 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors">
+          <button onClick={() => setShowAllReferrals(true)} className="w-full py-3 mt-8 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/5 transition-colors">
             View All Referrals
           </button>
         </div>
@@ -841,11 +965,36 @@ const ReferralsPage = () => {
 
 const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActive: boolean; sessionSecs: number; onToggleMining: () => void }) => {
   const [todayPoints, setTodayPoints] = useState(0);
-  const [weekPoints, setWeekPoints] = useState(84.20);
-  const [totalPoints, setTotalPoints] = useState(230.45);
+  const [weekPoints, setWeekPoints] = useState(0);
+  const [totalPoints, setTotalPoints] = useState(0);
   const [events, setEvents] = useState([
     { event: 'Mining session started', time: 'just now', amount: null as string | null },
   ]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch('/api/mining/history', { credentials: 'include' });
+      if (res.ok) {
+        setHistory(await res.json());
+      }
+    } catch(e) {}
+  };
+
+  useEffect(() => {
+    fetchHistory();
+    const fetchBalance = async () => {
+      try {
+        const res = await fetch('/api/wallet/balance', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setTotalPoints(data.balance);
+        }
+      } catch(e) {}
+    };
+    fetchBalance();
+  }, []);
 
   const fTime = (sec: number) => {
     const h = Math.floor(sec / 3600);
@@ -857,13 +1006,14 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
   useEffect(() => {
     if (!miningActive) return;
     const timer = setInterval(() => {
+      // Update rewards at real mining rate every minute
       if (sessionSecs % 60 === 0 && sessionSecs > 0) {
-        const earned = parseFloat((Math.random() * 0.02 + 0.01).toFixed(3));
-        setTodayPoints(p => parseFloat((p + earned).toFixed(3)));
-        setWeekPoints(p => parseFloat((p + earned).toFixed(3)));
-        setTotalPoints(p => parseFloat((p + earned).toFixed(3)));
+        const minuteEarned = parseFloat((MINING_RATE_PER_SEC * 60).toFixed(4));
+        setTodayPoints(p => parseFloat((p + minuteEarned).toFixed(4)));
+        setWeekPoints(p => parseFloat((p + minuteEarned).toFixed(4)));
+        setTotalPoints(p => parseFloat((p + minuteEarned).toFixed(4)));
         setEvents(ev => [
-          { event: `Reward credited: Network Relay`, time: `${Math.floor(sessionSecs/60)}m into session`, amount: `+${earned} REALM-P` },
+          { event: `Reward credited: +${minuteEarned.toFixed(4)} REALM`, time: `${Math.floor(sessionSecs/60)}m into session`, amount: `+${minuteEarned.toFixed(4)} REALM-P` },
           ...ev.slice(0, 4)
         ]);
       }
@@ -871,7 +1021,7 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
     return () => clearInterval(timer);
   }, [miningActive, sessionSecs]);
 
-  const rate = 0.84;
+  const rate = MINING_RATE_PER_HOUR;
   const sessionPct = Math.min(100, (sessionSecs / SESSION_DURATION) * 100);
   const timeRemaining = SESSION_DURATION - sessionSecs;
 
@@ -970,7 +1120,7 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
               </div>
             </div>
           </div>
-          <button className="w-full py-2.5 border border-realm-border rounded-md text-[10px] font-mono font-bold text-realm-text-secondary uppercase tracking-widest hover:border-white/15 hover:text-realm-text-primary transition-colors mt-8">
+          <button onClick={() => setShowHistoryModal(true)} className="w-full py-2.5 border border-realm-border rounded-md text-[10px] font-mono font-bold text-realm-text-secondary uppercase tracking-widest hover:border-white/15 hover:text-realm-text-primary transition-colors mt-8">
             View Detailed History
           </button>
         </div>
@@ -993,6 +1143,39 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
           </div>
         </div>
       </div>
+
+      {/* Detailed History Modal */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-realm-surface border border-realm-border p-6 rounded-xl w-[600px] max-w-[90vw] flex flex-col gap-4 max-h-[80vh]">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-realm-cyan" /> Mining History</h2>
+              <button onClick={() => setShowHistoryModal(false)} className="text-white/40 hover:text-white text-xl">&times;</button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              {history.length === 0 ? (
+                <p className="text-center text-sm text-white/40 my-8">No mining history found.</p>
+              ) : (
+                history.map((h, i) => (
+                  <div key={i} className="glass-panel p-4 flex justify-between items-center group hover:border-realm-cyan/30 transition-colors">
+                    <div>
+                      <p className="text-sm font-medium">Session Completed</p>
+                      <p className="text-[10px] text-white/40 font-mono mt-1">
+                        {new Date(h.startedAt).toLocaleString()} • {Math.floor(h.duration / 3600)}h {Math.floor((h.duration % 3600)/60)}m
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-realm-cyan font-mono text-sm">+{h.pointsEarned.toFixed(3)} REALM-P</p>
+                      <p className="text-[10px] text-white/30 font-mono uppercase mt-1">Status: Verified</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -1006,6 +1189,9 @@ const NodePage = () => {
   const [latency, setLatency] = useState(24);
   const [blockHeight, setBlockHeight] = useState(829102);
   const [restarting, setRestarting] = useState(false);
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+  const [restartProgress, setRestartProgress] = useState(0);
+  const [showLogsModal, setShowLogsModal] = useState(false);
 
   useEffect(() => {
     const networkEvents = [
@@ -1024,19 +1210,28 @@ const NodePage = () => {
       const event = networkEvents[Math.floor(Math.random() * networkEvents.length)];
       setLogs(prev => [
         { event: `${event} (Block #${blockHeight + 1})`, time: 'just now', type: 'network' },
-        ...prev.map(l => ({ ...l, time: l.time === 'just now' ? '1m ago' : l.time.includes('m ago') ? `${parseInt(l.time) + 1}m ago` : l.time })).slice(0, 7)
+        ...prev.map(l => ({ ...l, time: l.time === 'just now' ? '1m ago' : l.time.includes('m ago') ? `${parseInt(l.time) + 1}m ago` : l.time })).slice(0, 19)
       ]);
     }, 5000);
     return () => clearInterval(timer);
   }, [blockHeight]);
 
-  const handleRestart = () => {
+  const confirmRestart = () => {
+    setShowRestartConfirm(false);
     setRestarting(true);
-    setLogs(prev => [{ event: 'Module restart initiated by user', time: 'just now', type: 'system' }, ...prev.slice(0, 7)]);
-    setTimeout(() => {
-      setRestarting(false);
-      setLogs(prev => [{ event: 'Module restarted successfully', time: 'just now', type: 'system' }, ...prev.slice(0, 7)]);
-    }, 3000);
+    setRestartProgress(0);
+    setLogs(prev => [{ event: 'Module restart initiated by user', time: 'just now', type: 'system' }, ...prev.slice(0, 19)]);
+    
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setRestartProgress(progress);
+      if (progress >= 100) {
+        clearInterval(interval);
+        setRestarting(false);
+        setLogs(prev => [{ event: 'Module restarted successfully', time: 'just now', type: 'system' }, ...prev.slice(0, 19)]);
+      }
+    }, 300);
   };
 
   return (
@@ -1102,22 +1297,22 @@ const NodePage = () => {
               <p className="text-xs text-white/40">System automatically allocates resources based on network demand.</p>
             </div>
             <div className="flex gap-3">
-              <button className="px-4 py-2 text-xs font-mono border border-white/10 rounded-lg hover:bg-white/5">View Logs</button>
+              <button onClick={() => setShowLogsModal(true)} className="px-4 py-2 text-xs font-mono border border-white/10 rounded-lg hover:bg-white/5">View Logs</button>
               <button
-                onClick={handleRestart}
+                onClick={() => setShowRestartConfirm(true)}
                 disabled={restarting}
                 className={cn("px-4 py-2 text-xs font-mono rounded-lg font-bold transition-all", restarting ? "bg-yellow-400/20 text-yellow-400 border border-yellow-400/20 cursor-not-allowed" : "bg-realm-cyan text-realm-black hover:brightness-110")}
               >
-                {restarting ? 'Restarting...' : 'Restart Module'}
+                {restarting ? `Restarting... ${restartProgress}%` : 'Restart Module'}
               </button>
             </div>
           </div>
         </div>
 
         <div className="col-span-12 glass-panel p-8">
-          <h3 className="text-serif text-2xl mb-6">Live Node Activity <span className="text-xs font-mono text-realm-cyan ml-2 animate-pulse">● LIVE</span></h3>
+          <h3 className="text-serif text-2xl mb-6">Live Node Activity <span className="text-xs font-mono text-realm-cyan ml-2 animate-pulse">●  LIVE</span></h3>
           <div className="space-y-3">
-            {logs.map((log, i) => (
+            {logs.slice(0, 8).map((log, i) => (
               <motion.div
                 key={i}
                 initial={i === 0 ? { opacity: 0, x: -10 } : undefined}
@@ -1134,6 +1329,40 @@ const NodePage = () => {
           </div>
         </div>
       </div>
+
+      {/* Restart Confirm Modal */}
+      {showRestartConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-realm-surface border border-realm-border p-6 rounded-xl w-[400px] max-w-[90vw] flex flex-col gap-4">
+            <h2 className="text-lg font-bold text-white text-yellow-400 flex items-center gap-2"><Cpu size={20} /> Restart Module?</h2>
+            <p className="text-sm text-white/60">This will momentarily disconnect your node from the network. You may lose active peers.</p>
+            <div className="flex gap-4 justify-end mt-4">
+              <button onClick={() => setShowRestartConfirm(false)} className="px-4 py-2 text-xs font-bold text-white/60 hover:text-white">Cancel</button>
+              <button onClick={confirmRestart} className="px-4 py-2 bg-yellow-400 text-black text-xs font-bold rounded hover:bg-yellow-500">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Logs Modal */}
+      {showLogsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-realm-surface border border-realm-border p-6 rounded-xl w-[600px] max-w-[90vw] flex flex-col gap-4 max-h-[80vh]">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Search size={20} /> System Logs</h2>
+              <button onClick={() => setShowLogsModal(false)} className="text-white/40 hover:text-white text-xl">&times;</button>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-black border border-white/5 rounded p-4 font-mono text-xs space-y-2 max-h-[60vh]">
+              {logs.map((l, i) => (
+                <div key={i} className="flex gap-4 border-b border-white/5 pb-2 last:border-0">
+                  <span className="text-white/30 shrink-0">[{l.time.padEnd(8, ' ')}]</span>
+                  <span className={l.type === 'system' ? 'text-yellow-400' : 'text-realm-cyan'}>{l.event}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1141,18 +1370,24 @@ const NodePage = () => {
 const Leaderboard = () => {
   const [entries, setEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
   const fetchLeaderboard = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const res = await fetch(`${API_URL}/api/leaderboard`, { credentials: 'include' });
+      const res = await fetch('/api/users/leaderboard', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setEntries(data);
         setLastUpdated(new Date());
+      } else {
+        setError('Failed to fetch leaderboard data.');
       }
-    } catch (e) {}
+    } catch (e) {
+      setError('Network error. Could not connect to servers.');
+    }
     setLoading(false);
   };
 
@@ -1186,6 +1421,12 @@ const Leaderboard = () => {
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <div className="w-8 h-8 border-2 border-realm-cyan border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-3 text-center p-8">
+            <ShieldCheck size={36} className="text-red-400/50" />
+            <p className="text-sm text-red-400/80">{error}</p>
+            <button onClick={fetchLeaderboard} className="text-xs text-realm-cyan hover:underline">Try Again</button>
           </div>
         ) : entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-center p-8">
@@ -1244,70 +1485,121 @@ const Leaderboard = () => {
   );
 };
 
-const SettingsPage = () => (
-  <div className="max-w-4xl mx-auto space-y-10">
-    <section>
-      <h1 className="text-serif text-6xl font-medium mb-4">System <span className="text-realm-cyan">Settings</span></h1>
-      <p className="text-white/50 font-mono text-sm tracking-wide">Configure your node environment and preferences.</p>
-    </section>
+const SettingsPage = () => {
+  const [settings, setSettings] = useState([
+    { 
+      category: 'Node Configuration', 
+      items: [
+        { label: 'Auto-start on boot', desc: 'Launch node automatically when system starts', active: true },
+        { label: 'Background execution', desc: 'Keep node running when dashboard is closed', active: true },
+        { label: 'Resource allocation', desc: 'Adjust dedicated CPU/Memory usage', isSlider: true, value: 50 },
+      ]
+    },
+    { 
+      category: 'Privacy & Security', 
+      items: [
+        { label: 'Encrypted logs', desc: 'All local logs are stored with AES-256 encryption', active: true },
+        { label: 'Stealth mode', desc: 'Hide node presence from local network discovery', active: false },
+        { label: 'Automatic updates', desc: 'Keep node software updated to latest version', active: true },
+      ]
+    },
+    { 
+      category: 'Notifications', 
+      items: [
+        { label: 'Payout alerts', desc: 'Notify when rewards are credited to balance', active: true },
+        { label: 'Network status', desc: 'Alert if node loses connection to peers', active: true },
+      ]
+    }
+  ]);
+  const [toastMessage, setToastMessage] = useState('');
 
-    <div className="space-y-6">
-      {[
-        { 
-          category: 'Node Configuration', 
-          items: [
-            { label: 'Auto-start on boot', desc: 'Launch node automatically when system starts', active: true },
-            { label: 'Background execution', desc: 'Keep node running when dashboard is closed', active: true },
-            { label: 'Resource allocation', desc: 'Limit CPU usage to 50%', active: false },
-          ]
-        },
-        { 
-          category: 'Privacy & Security', 
-          items: [
-            { label: 'Encrypted logs', desc: 'All local logs are stored with AES-256 encryption', active: true },
-            { label: 'Stealth mode', desc: 'Hide node presence from local network discovery', active: false },
-            { label: 'Automatic updates', desc: 'Keep node software updated to latest version', active: true },
-          ]
-        },
-        { 
-          category: 'Notifications', 
-          items: [
-            { label: 'Payout alerts', desc: 'Notify when rewards are credited to balance', active: true },
-            { label: 'Network status', desc: 'Alert if node loses connection to peers', active: true },
-          ]
-        }
-      ].map(group => (
-        <div key={group.category} className="glass-panel p-8">
-          <h3 className="text-serif text-2xl mb-6">{group.category}</h3>
-          <div className="space-y-6">
-            {group.items.map(item => (
-              <div key={item.label} className="flex justify-between items-center py-4 border-b border-white/5 last:border-0">
-                <div className="space-y-1">
-                  <p className="font-medium">{item.label}</p>
-                  <p className="text-xs text-white/40 font-mono">{item.desc}</p>
+  const handleToggle = (cIndex: number, iIndex: number) => {
+    const newSettings = [...settings];
+    if (newSettings[cIndex].items[iIndex].isSlider) return;
+    newSettings[cIndex].items[iIndex].active = !newSettings[cIndex].items[iIndex].active;
+    setSettings(newSettings);
+  };
+
+  const handleSlider = (cIndex: number, iIndex: number, val: number) => {
+    const newSettings = [...settings];
+    newSettings[cIndex].items[iIndex].value = val;
+    setSettings(newSettings);
+  };
+
+  const notify = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-10 relative">
+      {toastMessage && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-0 right-0 py-3 px-6 bg-realm-cyan/20 border border-realm-cyan text-realm-cyan rounded-lg text-sm font-bold shadow-[0_0_20px_rgba(61,242,224,0.3)] z-50"
+        >
+          {toastMessage}
+        </motion.div>
+      )}
+
+      <section>
+        <h1 className="text-serif text-6xl font-medium mb-4">System <span className="text-realm-cyan">Settings</span></h1>
+        <p className="text-white/50 font-mono text-sm tracking-wide">Configure your node environment and preferences.</p>
+      </section>
+
+      <div className="space-y-6">
+        {settings.map((group, cIndex) => (
+          <div key={group.category} className="glass-panel p-8">
+            <h3 className="text-serif text-2xl mb-6">{group.category}</h3>
+            <div className="space-y-6">
+              {group.items.map((item, iIndex) => (
+                <div key={item.label} className="flex justify-between items-center py-4 border-b border-white/5 last:border-0">
+                  <div className="space-y-1 flex-1 pr-6">
+                    <p className="font-medium">{item.label}</p>
+                    <p className="text-xs text-white/40 font-mono">{item.desc}</p>
+                  </div>
+                  
+                  {item.isSlider ? (
+                    <div className="w-48 flex flex-col gap-2">
+                       <input 
+                         type="range" 
+                         min="10" 
+                         max="100" 
+                         value={item.value || 50} 
+                         onChange={(e) => handleSlider(cIndex, iIndex, parseInt(e.target.value))}
+                         className="w-full accent-realm-cyan h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                       />
+                       <p className="text-xs font-mono text-realm-cyan text-right">{item.value}%</p>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => handleToggle(cIndex, iIndex)}
+                      className={cn(
+                        "w-12 h-6 rounded-full p-1 transition-colors duration-300 cursor-pointer",
+                        item.active ? "bg-realm-cyan" : "bg-white/10"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 bg-white rounded-full transition-transform duration-300",
+                        item.active ? "translate-x-6" : "translate-x-0"
+                      )} />
+                    </button>
+                  )}
                 </div>
-                <div className={cn(
-                  "w-12 h-6 rounded-full p-1 transition-colors duration-300 cursor-pointer",
-                  item.active ? "bg-realm-cyan" : "bg-white/10"
-                )}>
-                  <div className={cn(
-                    "w-4 h-4 bg-white rounded-full transition-transform duration-300",
-                    item.active ? "translate-x-6" : "translate-x-0"
-                  )} />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      
+      <div className="flex justify-end gap-4 pt-6">
+        <button onClick={() => notify('Changes discarded.')} className="px-8 py-3 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/5 transition-all">Discard Changes</button>
+        <button onClick={() => notify('Configuration saved successfully.')} className="px-8 py-3 bg-realm-cyan text-realm-black rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(61,242,224,0.3)] transition-all">Save Configuration</button>
+      </div>
     </div>
-    
-    <div className="flex justify-end gap-4 pt-6">
-      <button className="px-8 py-3 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/5 transition-all">Discard Changes</button>
-      <button className="px-8 py-3 bg-realm-cyan text-realm-black rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(61,242,224,0.3)] transition-all">Save Configuration</button>
-    </div>
-  </div>
-);
+  );
+};
 
 const WalletPage = () => {
   const [balance, setBalance] = useState(0);
@@ -1316,12 +1608,21 @@ const WalletPage = () => {
   const [transferring, setTransferring] = useState(false);
   const [message, setMessage] = useState('');
   const [history, setHistory] = useState<any[]>([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  const initiateTransfer = () => {
+    if (!recipient || !transferAmount) {
+      setMessage('Please enter a recipient and amount.');
+      return;
+    }
+    setMessage('');
+    setShowConfirmModal(true);
+  };
 
   const fetchData = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const balRes = await fetch(`${API_URL}/api/wallet/balance`, { credentials: 'include' });
-      const histRes = await fetch(`${API_URL}/api/mining/history`, { credentials: 'include' });
+      const balRes = await fetch('/api/wallet/balance', { credentials: 'include' });
+      const histRes = await fetch('/api/mining/history', { credentials: 'include' });
       if (balRes.ok) {
         const data = await balRes.json();
         setBalance(data.balance);
@@ -1337,11 +1638,10 @@ const WalletPage = () => {
   }, []);
 
   const handleTransfer = async () => {
-    if (!recipient || !transferAmount) return;
+    setShowConfirmModal(false);
     setTransferring(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const res = await fetch(`${API_URL}/api/wallet/transfer`, {
+      const res = await fetch('/api/wallet/transfer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1478,7 +1778,7 @@ const WalletPage = () => {
               )}
 
               <button 
-                onClick={handleTransfer}
+                onClick={initiateTransfer}
                 disabled={transferring}
                 className="w-full py-5 bg-white text-realm-black rounded-2xl text-sm font-bold hover:bg-realm-cyan hover:shadow-[0_0_30px_rgba(61,242,224,0.3)] transition-all flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1492,17 +1792,77 @@ const WalletPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Transfer Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-realm-surface border border-realm-border p-6 rounded-xl w-[400px] max-w-[90vw] flex flex-col gap-6">
+            <h2 className="text-xl font-bold text-white text-center">Confirm Transfer</h2>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+                <span className="text-white/40">Amount</span>
+                <span className="font-mono text-realm-cyan">{parseFloat(transferAmount).toFixed(2)} REALM</span>
+              </div>
+              <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+                <span className="text-white/40">Recipient</span>
+                <span className="font-mono text-white/80 max-w-[200px] truncate">{recipient}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-white/40">Network Fee</span>
+                <span className="font-mono text-white/60">0.00 REALM</span>
+              </div>
+            </div>
+            
+            <p className="text-[10px] text-yellow-400/80 text-center font-mono leading-relaxed px-4">
+              Transfers are final and irreversible. Ensure the recipient identity is correct.
+            </p>
+
+            <div className="flex gap-4">
+              <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-3 text-xs font-bold text-white/60 hover:text-white border border-white/10 rounded-xl transition-colors">Cancel</button>
+              <button onClick={handleTransfer} className="flex-1 py-3 bg-realm-cyan text-realm-black text-xs font-bold rounded-xl hover:shadow-[0_0_15px_rgba(61,242,224,0.3)] transition-all">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 const Profile = () => {
-  const [user, setUser] = useState<{ email?: string; walletAddress?: string; name?: string } | null>(null);
+  const [user, setUser] = useState<{ email?: string; walletAddress?: string; name?: string; avatarUrl?: string; username?: string; referralCode?: string } | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editAvatar, setEditAvatar] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert('Image must be under 2MB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEditAvatar(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const [securitySettings, setSecuritySettings] = useState([
+    { label: 'Two-Factor Authentication', status: 'Enabled', active: true },
+    { label: 'Hardware Key', status: 'Not Configured', active: false },
+    { label: 'Session Lockdown', status: 'Enabled', active: true },
+  ]);
+
+  const toggleSecurity = (index: number) => {
+    const newSettings = [...securitySettings];
+    newSettings[index].active = !newSettings[index].active;
+    newSettings[index].status = newSettings[index].active ? 'Enabled' : 'Disabled';
+    setSecuritySettings(newSettings);
+  };
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        const res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setUser(data);
@@ -1517,7 +1877,9 @@ const Profile = () => {
       <div className="flex items-end gap-8">
         <div className="w-40 h-40 rounded-3xl bg-gradient-to-br from-realm-cyan/20 to-transparent border border-realm-cyan/30 p-1">
           <div className="w-full h-full rounded-[22px] overflow-hidden bg-realm-surface flex items-center justify-center">
-            {user?.email ? (
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : user?.email ? (
               <span className="text-4xl font-bold text-realm-cyan">{user.email[0].toUpperCase()}</span>
             ) : (
               <User size={48} className="text-white/20" />
@@ -1529,12 +1891,23 @@ const Profile = () => {
             {user?.name || user?.email?.split('@')[0] || user?.walletAddress?.slice(0, 12) || 'Anonymous Node'}
           </h1>
           <p className="text-white/40 font-mono text-sm">
-            {user?.email ? `${user.email} • ` : ''}
-            {user?.walletAddress ? `${user.walletAddress.slice(0,8)}...${user.walletAddress.slice(-4)} • ` : ''}
-            Verified Node Operator
+            {user?.username ? <span className="text-realm-cyan">@{user.username}</span> : ''}
+            {user?.email ? ` • ${user.email}` : ''}
+            {user?.walletAddress ? ` • ${user.walletAddress.slice(0,8)}...${user.walletAddress.slice(-4)}` : ''}
           </p>
+          {user?.referralCode && (
+            <p className="text-white/30 font-mono text-xs mt-1">Referral Code: <span className="text-realm-cyan">{user.referralCode}</span></p>
+          )}
         </div>
-        <button className="mb-4 px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/10 transition-all">
+        <button 
+          onClick={() => {
+            setEditName(user?.name || '');
+            setEditAvatar(user?.avatarUrl || '');
+            setEditUsername(user?.username || '');
+            setShowEditModal(true);
+          }}
+          className="mb-4 px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/10 transition-all"
+        >
           Edit Profile
         </button>
       </div>
@@ -1567,9 +1940,9 @@ const Profile = () => {
               </div>
             </div>
             {user?.email ? (
-              <a href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/logout`} className="px-4 py-1.5 text-xs font-bold text-red-400 border border-red-400/20 rounded-lg hover:bg-red-400/10 transition-colors">Disconnect</a>
+              <a href={`${''}/api/auth/logout`} className="px-4 py-1.5 text-xs font-bold text-red-400 border border-red-400/20 rounded-lg hover:bg-red-400/10 transition-colors">Disconnect</a>
             ) : (
-              <a href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/google`} className="px-4 py-1.5 text-xs font-bold bg-white text-realm-black rounded-lg hover:bg-realm-cyan transition-colors">Connect</a>
+              <a href={`${''}/api/auth/google`} className="px-4 py-1.5 text-xs font-bold bg-white text-realm-black rounded-lg hover:bg-realm-cyan transition-colors">Connect</a>
             )}
           </div>
 
@@ -1583,7 +1956,7 @@ const Profile = () => {
                 <p className="text-xs text-white/40 font-mono">Not connected</p>
               </div>
             </div>
-            <a href="https://twitter.com/REALMxAI" target="_blank" rel="noreferrer" className="px-4 py-1.5 text-xs font-bold border border-white/10 rounded-lg hover:border-realm-cyan hover:text-realm-cyan transition-colors">Follow & Connect</a>
+            <a href={`${''}/api/auth/twitter`} className="px-4 py-1.5 text-xs font-bold bg-white text-realm-black rounded-lg hover:bg-realm-cyan transition-colors">Connect</a>
           </div>
 
           <div className="flex justify-between items-center py-4 border-b border-white/5">
@@ -1596,7 +1969,7 @@ const Profile = () => {
                 <p className="text-xs text-white/40 font-mono">Not connected</p>
               </div>
             </div>
-            <a href="https://github.com" target="_blank" rel="noreferrer" className="px-4 py-1.5 text-xs font-bold border border-white/10 rounded-lg hover:border-realm-cyan hover:text-realm-cyan transition-colors">Connect</a>
+            <a href={`${''}/api/auth/github`} className="px-4 py-1.5 text-xs font-bold bg-white text-realm-black rounded-lg hover:bg-realm-cyan transition-colors">Connect</a>
           </div>
 
           <div className="flex justify-between items-center py-4">
@@ -1617,29 +1990,98 @@ const Profile = () => {
       <div className="glass-panel p-10 space-y-8">
         <h3 className="text-serif text-3xl">Account Security</h3>
         <div className="space-y-6">
-          {[
-            { label: 'Two-Factor Authentication', status: 'Enabled', active: true },
-            { label: 'Hardware Key', status: 'Not Configured', active: false },
-            { label: 'Session Lockdown', status: 'Enabled', active: true },
-          ].map(item => (
+          {securitySettings.map((item, index) => (
             <div key={item.label} className="flex justify-between items-center py-4 border-b border-white/5 last:border-0">
               <div>
                 <p className="font-medium">{item.label}</p>
                 <p className="text-xs text-white/40 font-mono">{item.status}</p>
               </div>
-              <div className={cn(
-                "w-12 h-6 rounded-full p-1 transition-colors duration-300",
-                item.active ? "bg-realm-cyan" : "bg-white/10"
-              )}>
+              <button 
+                onClick={() => toggleSecurity(index)}
+                className={cn(
+                  "w-12 h-6 rounded-full p-1 transition-colors duration-300",
+                  item.active ? "bg-realm-cyan" : "bg-white/10"
+                )}
+              >
                 <div className={cn(
                   "w-4 h-4 bg-white rounded-full transition-transform duration-300",
                   item.active ? "translate-x-6" : "translate-x-0"
                 )} />
-              </div>
+              </button>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Edit Profile Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+           <div className="bg-realm-surface border border-realm-border p-8 rounded-xl w-[400px] max-w-[90vw] flex flex-col gap-6">
+              <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                 <h2 className="text-xl font-bold text-white">Edit Profile</h2>
+                 <button onClick={() => setShowEditModal(false)} className="text-white/40 hover:text-white text-2xl">&times;</button>
+              </div>
+                 <div className="space-y-4">
+                    <div className="space-y-2">
+                       <label className="text-[10px] text-white/40 font-mono uppercase">Display Name</label>
+                       <input 
+                          type="text" 
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:border-realm-cyan outline-none transition-all"
+                          placeholder="Enter new name"
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] text-white/40 font-mono uppercase">Username</label>
+                       <input 
+                          type="text" 
+                          value={editUsername}
+                          onChange={e => setEditUsername(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:border-realm-cyan outline-none transition-all"
+                          placeholder="your_username"
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] text-white/40 font-mono uppercase">Profile Photo</label>
+                       <input type="file" ref={fileInputRef} accept="image/*" onChange={handleFileUpload} className="hidden" />
+                       <div className="flex items-center gap-3">
+                         {editAvatar && <img src={editAvatar} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-white/10" />}
+                         <button 
+                           type="button"
+                           onClick={() => fileInputRef.current?.click()}
+                           className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white/60 hover:text-white hover:border-realm-cyan transition-all"
+                         >
+                           {editAvatar ? 'Change Photo' : 'Upload Photo'}
+                         </button>
+                         {editAvatar && <button type="button" onClick={() => setEditAvatar('')} className="text-xs text-red-400 hover:text-red-300">Remove</button>}
+                       </div>
+                    </div>
+                 </div>
+              <div className="flex gap-4 mt-4">
+                 <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 text-xs font-bold text-white/60 hover:text-white border border-white/10 rounded-xl transition-colors">Cancel</button>
+                 <button 
+                    onClick={async () => {
+                       try {
+                          const res = await fetch('/api/users/me', {
+                             method: 'PUT',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ name: editName, avatarUrl: editAvatar, username: editUsername }),
+                             credentials: 'include'
+                          });
+                          if (res.ok) {
+                             const updatedUser = await res.json();
+                             setUser(updatedUser);
+                          }
+                       } catch (e) {}
+                       setShowEditModal(false);
+                    }} 
+                    className="flex-1 py-3 bg-realm-cyan text-realm-black text-xs font-bold rounded-xl hover:shadow-[0_0_15px_rgba(61,242,224,0.3)] transition-all"
+                 >Save Changes</button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1661,7 +2103,7 @@ export default function App() {
         // Hourly distribution check
         if (next % 3600 === 0 && next > 0) {
           const syncMining = async () => {
-             const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+             const API_URL = '';
              await fetch(`${API_URL}/api/mining/sync`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
@@ -1679,7 +2121,7 @@ export default function App() {
           
           // Final sync
           const finalSync = async () => {
-            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+            const API_URL = '';
             await fetch(`${API_URL}/api/mining/sync`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1698,28 +2140,32 @@ export default function App() {
   }, [miningActive]);
 
   const handleToggleMining = async () => {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     if (miningActive) {
-      // Stop: always update state immediately
+      // Stop: sync to backend with stopMining flag so balance gets credited
       setMiningActive(false);
-      const remainingSecs = sessionSecs;
+      const elapsedSecs = sessionSecs;
       setSessionSecs(0);
       saveMiningSession({ startedAt: Date.now(), active: false });
-      // Best-effort sync to backend (won't break if not logged in)
-      fetch(`${API_URL}/api/mining/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionSeconds: remainingSecs % 3600 }),
-        credentials: 'include'
-      }).catch(() => {});
+      try {
+        const res = await fetch('/api/mining/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionSeconds: elapsedSecs, stopMining: true }),
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Balance was credited on the backend — force TopBar refresh
+          window.dispatchEvent(new Event('balance-updated'));
+        }
+      } catch (e) {}
     } else {
       // Start: always update state immediately
       const now = Date.now();
       setMiningActive(true);
       setSessionSecs(0);
       saveMiningSession({ startedAt: now, active: true });
-      // Best-effort notify backend (won't break if not logged in)
-      fetch(`${API_URL}/api/mining/start`, {
+      fetch('/api/mining/start', {
         method: 'POST',
         credentials: 'include'
       }).catch(() => {});
@@ -1736,7 +2182,7 @@ export default function App() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <TopBar onNavigate={(t) => setActiveTab(t)} />
 
-      <main className="pl-64 pt-20 min-h-screen">
+      <main className="pl-0 md:pl-64 pt-20 min-h-screen">
         <div className="max-w-7xl mx-auto p-12">
           <AnimatePresence mode="wait">
             <motion.div
@@ -1746,7 +2192,7 @@ export default function App() {
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
-              {activeTab === 'dashboard' && <Dashboard miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleToggleMining} />}
+              {activeTab === 'dashboard' && <Dashboard miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleToggleMining} onNavigate={(t) => setActiveTab(t)} />}
               {activeTab === 'leaderboard' && <Leaderboard />}
               {activeTab === 'node' && <NodePage />}
               {activeTab === 'mining' && <MiningPage miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleToggleMining} />}

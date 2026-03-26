@@ -16,16 +16,27 @@ const TASK_DEFINITIONS = [
   // --- One-time social tasks ---
   { id: 'follow_x', type: 'one-time', title: 'Follow REALMxAI on X', description: 'Follow our official X (Twitter) account and stay updated.', reward: 10, link: 'https://twitter.com/realmxai', icon: 'Twitter' },
   { id: 'join_discord', type: 'one-time', title: 'Join our Discord', description: 'Join the REALMxAI Discord community server.', reward: 10, link: 'https://discord.gg/realmxai', icon: 'Discord' },
+  { id: 'join_telegram', type: 'one-time', title: 'Join Telegram Channel', description: 'Join the official REALMxAI Telegram announcement channel.', reward: 10, link: 'https://t.me/REALMxAI', icon: 'MessageCircle' },
   { id: 'retweet_launch', type: 'one-time', title: 'Retweet Launch Post', description: 'Retweet the official REALMxAI launch announcement.', reward: 15, link: 'https://twitter.com/realmxai', icon: 'Twitter' },
   { id: 'signup_reward', type: 'one-time', title: 'Node Registration', description: 'Complete your node registration (you\'ve already done this!)', reward: 25, icon: 'ShieldCheck' },
+  // --- One-time milestone tasks ---
+  { id: 'complete_profile', type: 'one-time', title: 'Complete Your Profile', description: 'Set a display name and profile image to earn bonus points.', reward: 15, icon: 'User' },
+  { id: 'first_referral', type: 'one-time', title: 'Refer Your First Friend', description: 'Share your referral code and get 1 person to join REALMxAI.', reward: 20, icon: 'Users' },
+  { id: 'connect_wallet', type: 'one-time', title: 'Connect Web3 Wallet', description: 'Link a Web3 wallet to your account via SIWE authentication.', reward: 15, icon: 'Wallet' },
+  { id: 'first_mine_session', type: 'one-time', title: 'First Mining Session', description: 'Complete your first full 6-hour mining session.', reward: 30, icon: 'Pickaxe' },
   // --- Daily tasks ---
-  { id: 'daily_mine', type: 'daily', title: 'Run a Mining Session', description: 'Complete a mining session today.', reward: 5, icon: 'Pickaxe' },
-  { id: 'daily_connect', type: 'daily', title: 'Connect Your Wallet', description: 'Connect your Web3 wallet to your account.', reward: 5, icon: 'Wallet' },
+  { id: 'daily_checkin', type: 'daily', title: 'Daily Check-In', description: 'Visit the dashboard daily to earn check-in rewards.', reward: 2, icon: 'Calendar' },
+  { id: 'daily_mine', type: 'daily', title: 'Run a Mining Session', description: 'Start a mining session today to contribute to the network.', reward: 5, icon: 'Pickaxe' },
+  { id: 'daily_share', type: 'daily', title: 'Share on Social Media', description: 'Share your mining stats or referral link on any social platform.', reward: 3, icon: 'Share2' },
 ];
 
-// GET /api/tasks — returns all tasks with completion status for current user
-router.get('/', isAuthenticated, async (req: any, res: any) => {
+// GET /api/tasks — returns all tasks with completion status for current user (or public if unauthenticated)
+router.get('/', async (req: any, res: any) => {
   try {
+    if (!req.isAuthenticated()) {
+      return res.json(TASK_DEFINITIONS.map(task => ({ ...task, completed: false })));
+    }
+
     const userId = req.user.id;
     const completions = await prisma.taskCompletion.findMany({
       where: { userId }

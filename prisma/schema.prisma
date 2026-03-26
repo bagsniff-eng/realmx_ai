@@ -9,8 +9,11 @@ datasource db {
 
 model User {
   id             String    @id @default(uuid())
+  username       String?   @unique
   email          String?   @unique
   walletAddress  String?   @unique
+  name           String?
+  avatarUrl      String?   @db.Text
   githubId       String?   @unique
   discordId      String?   @unique
   twitterId      String?   @unique

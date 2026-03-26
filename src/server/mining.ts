@@ -12,19 +12,24 @@ const isAuthenticated = (req: any, res: any, next: any) => {
 };
 
 const SESSION_DURATION = 6 * 3600; // 6 hours
+const MINING_RATE_PER_HOUR = 10;
 
 // Start mining session
 router.post('/start', isAuthenticated, async (req: any, res: any) => {
   try {
     const userId = req.user.id;
 
-    // Check for active session
+    // End any existing active session first
     const active = await prisma.miningSession.findFirst({
         where: { userId, isActive: true }
     });
 
     if (active) {
-        return res.status(400).json({ message: 'Session already active' });
+      // Close stale session
+      await prisma.miningSession.update({
+        where: { id: active.id },
+        data: { isActive: false, endedAt: new Date() }
+      });
     }
 
     const session = await prisma.miningSession.create({
@@ -41,43 +46,61 @@ router.post('/start', isAuthenticated, async (req: any, res: any) => {
   }
 });
 
-// Hourly sync to distribute points
+// Sync points to distribute — called periodically and on stop
 router.post('/sync', isAuthenticated, async (req: any, res: any) => {
   try {
     const userId = req.user.id;
-    const { sessionSeconds } = req.body;
+    const { sessionSeconds, stopMining } = req.body;
 
     const active = await prisma.miningSession.findFirst({
       where: { userId, isActive: true }
     });
 
     if (!active) {
-        return res.status(400).json({ message: 'No active session' });
+      // No active session — if stopMining is true, just return success
+      if (stopMining) return res.json({ success: true, earned: 0, sessionEnded: true });
+      return res.status(400).json({ message: 'No active session' });
     }
 
-    // Rate: 10 REALM / hour = 1/360 REALM per second
-    const earned = (sessionSeconds / 3600) * 10;
+    // Calculate new earnings based on total session seconds reported
+    const totalEarned = Math.min(
+      (sessionSeconds / 3600) * MINING_RATE_PER_HOUR,
+      (SESSION_DURATION / 3600) * MINING_RATE_PER_HOUR // cap at max session reward (60 REALM)
+    );
+    const newlyEarned = Math.max(0, totalEarned - active.pointsEarned);
     
-    // Check if session has ended (6 hours)
-    const elapsedSeconds = Math.floor((Date.now() - active.startedAt.getTime()) / 1000);
-    const isEnding = elapsedSeconds >= SESSION_DURATION;
+    // Check if session has ended (6 hours or user stopped)
+    const isEnding = stopMining || sessionSeconds >= SESSION_DURATION;
 
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: { points: { increment: earned } }
-      }),
-      prisma.miningSession.update({
-        where: { id: active.id },
-        data: { 
-          pointsEarned: { increment: earned },
-          isActive: !isEnding,
-          endedAt: isEnding ? new Date() : null
-        }
-      })
-    ]);
+    if (newlyEarned > 0 || isEnding) {
+      await prisma.$transaction([
+        // Credit points to user balance
+        prisma.user.update({
+          where: { id: userId },
+          data: { points: { increment: newlyEarned } }
+        }),
+        // Update mining session record
+        prisma.miningSession.update({
+          where: { id: active.id },
+          data: { 
+            pointsEarned: totalEarned,
+            isActive: !isEnding,
+            endedAt: isEnding ? new Date() : null
+          }
+        })
+      ]);
+    }
 
-    res.json({ success: true, earned, sessionEnded: isEnding });
+    // Fetch updated user balance
+    const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
+
+    res.json({ 
+      success: true, 
+      earned: newlyEarned, 
+      totalSessionEarned: totalEarned,
+      newBalance: updatedUser?.points || 0,
+      sessionEnded: isEnding 
+    });
   } catch (error: any) {
     logger.error('Error syncing points:', error);
     res.status(500).json({ error: error.message });
@@ -98,6 +121,50 @@ router.get('/history', isAuthenticated, async (req: any, res: any) => {
         logger.error('Error fetching history:', error);
         res.status(500).json({ error: error.message });
     }
+});
+
+// Get earnings chart data — returns daily point earnings for the user
+router.get('/earnings', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { period } = req.query; // '24h', '7d', '30d'
+
+    let daysBack = 7;
+    if (period === '24h') daysBack = 1;
+    else if (period === '30d') daysBack = 30;
+
+    const since = new Date();
+    since.setDate(since.getDate() - daysBack);
+
+    const sessions = await prisma.miningSession.findMany({
+      where: {
+        userId,
+        startedAt: { gte: since }
+      },
+      orderBy: { startedAt: 'asc' }
+    });
+
+    // Aggregate by day
+    const dailyMap: Record<string, number> = {};
+    sessions.forEach((s: any) => {
+      const day = s.startedAt.toISOString().split('T')[0];
+      dailyMap[day] = (dailyMap[day] || 0) + s.pointsEarned;
+    });
+
+    // Fill gaps with 0
+    const data: { date: string; earned: number }[] = [];
+    const cursor = new Date(since);
+    while (cursor <= new Date()) {
+      const key = cursor.toISOString().split('T')[0];
+      data.push({ date: key, earned: dailyMap[key] || 0 });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    res.json(data);
+  } catch (error: any) {
+    logger.error('Error fetching earnings:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;

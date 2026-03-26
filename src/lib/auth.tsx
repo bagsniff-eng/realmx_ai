@@ -12,7 +12,6 @@ import { mainnet, polygon, optimism, arbitrum, base } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { SiweMessage } from 'siwe';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const queryClient = new QueryClient();
 
 export const wagmiConfig = getDefaultConfig({
@@ -28,7 +27,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           if (data && (data.email || data.walletAddress)) {
@@ -44,7 +43,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   const authAdapter = createAuthenticationAdapter({
     getNonce: async () => {
-      const response = await fetch(`${API_URL}/api/auth/nonce`, { credentials: 'include' });
+      const response = await fetch('/api/auth/nonce', { credentials: 'include' });
       const text = await response.text();
       return text;
     },
@@ -64,7 +63,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const searchParams = new URLSearchParams(window.location.search);
       const refCode = searchParams.get('ref') || localStorage.getItem('ref');
       
-      const verifyRes = await fetch(`${API_URL}/api/auth/verify`, {
+      const verifyRes = await fetch('/api/auth/verify', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -75,7 +74,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         const data = await verifyRes.json();
         setAuthStatus('authenticated');
         if (refCode && data.user?.id) {
-           await fetch(`${API_URL}/api/referral`, {
+           await fetch('/api/referral', {
              method: 'POST',
              headers: {'Content-Type': 'application/json'},
              body: JSON.stringify({ code: refCode, userId: data.user.id })
@@ -85,7 +84,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       return verifyRes.ok;
     },
     signOut: async () => {
-      await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
       setAuthStatus('unauthenticated');
     },
   });

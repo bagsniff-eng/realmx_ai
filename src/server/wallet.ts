@@ -5,9 +5,7 @@ import { logger } from './logger.js';
 const router = Router();
 
 const isAuthenticated = (req: any, res: any, next: any) => {
-  if (req.isAuthenticated()) {
-    return next();
-  }
+  if (req.isAuthenticated()) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
 
@@ -24,14 +22,34 @@ router.get('/balance', isAuthenticated, async (req: any, res: any) => {
   }
 });
 
-// Transfer points
+// Get wallet balance (public — returns 0 if not authenticated)
+router.get('/balance-public', async (req: any, res: any) => {
+  if (req.isAuthenticated()) {
+    try {
+      const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+      return res.json({ balance: user?.points || 0 });
+    } catch (e) {}
+  }
+  res.json({ balance: 0 });
+});
+
+// Transfer points — supports username, email, or wallet address
 router.post('/transfer', isAuthenticated, async (req: any, res: any) => {
   try {
     const fromUserId = req.user.id;
-    const { toEmail, toWallet, amount } = req.body;
+    const { recipient, amount } = req.body;
+    // `recipient` can be a username, email, or wallet address
+
+    if (!recipient || typeof recipient !== 'string') {
+      return res.status(400).json({ message: 'Recipient is required (username, email, or wallet address)' });
+    }
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ message: 'Invalid amount' });
+    }
+
+    if (amount > 10000) {
+      return res.status(400).json({ message: 'Transfer limit exceeded (max 10,000)' });
     }
 
     const fromUser = await prisma.user.findUnique({
@@ -42,24 +60,26 @@ router.post('/transfer', isAuthenticated, async (req: any, res: any) => {
       return res.status(400).json({ message: 'Insufficient balance' });
     }
 
+    // Find recipient by username, email, or wallet address
     const toUser = await prisma.user.findFirst({
       where: {
         OR: [
-          { email: toEmail || undefined },
-          { walletAddress: toWallet || undefined }
+          { username: recipient },
+          { email: recipient },
+          { walletAddress: recipient }
         ]
       }
     });
 
     if (!toUser) {
-      return res.status(404).json({ message: 'Recipient not found' });
+      return res.status(404).json({ message: 'Recipient not found. Try their username, email, or wallet address.' });
     }
 
     if (toUser.id === fromUserId) {
-        return res.status(400).json({ message: 'Cannot transfer to yourself' });
+      return res.status(400).json({ message: 'Cannot transfer to yourself' });
     }
 
-    // Transaction to ensure atomicity
+    // Atomic transaction
     await prisma.$transaction([
       prisma.user.update({
         where: { id: fromUserId },
@@ -71,7 +91,11 @@ router.post('/transfer', isAuthenticated, async (req: any, res: any) => {
       })
     ]);
 
-    res.json({ success: true, newBalance: fromUser.points - amount });
+    res.json({ 
+      success: true, 
+      newBalance: fromUser.points - amount,
+      recipientName: toUser.name || toUser.username
+    });
   } catch (error: any) {
     logger.error('Error transferring points:', error);
     res.status(500).json({ error: error.message });

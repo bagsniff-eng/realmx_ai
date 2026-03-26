@@ -5,6 +5,43 @@ import { Strategy as DiscordStrategy } from 'passport-discord';
 import { Strategy as TwitterStrategy } from 'passport-twitter-oauth2';
 import { prisma } from './db.js';
 import { generateNonce, SiweMessage } from 'siwe';
+import crypto from 'crypto';
+
+// Generate short, human-readable referral code like "REALM-A3X7K2"
+function generateReferralCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I, O, 0, 1 to avoid confusion
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `REALM-${code}`;
+}
+
+// Generate unique username like "node_a3x7f2"
+function generateUsername(): string {
+  const hex = crypto.randomBytes(4).toString('hex'); // 8 hex chars
+  return `node_${hex}`;
+}
+
+// Helper to create user with proper defaults
+async function createUserWithDefaults(data: Record<string, any>) {
+  // Try up to 3 times in case of referral/username collision
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await prisma.user.create({
+        data: {
+          ...data,
+          username: generateUsername(),
+          referralCode: generateReferralCode(),
+        }
+      });
+    } catch (e: any) {
+      if (e.code === 'P2002' && attempt < 2) continue; // unique constraint, retry
+      throw e;
+    }
+  }
+  throw new Error('Failed to generate unique user identifiers');
+}
 
 passport.serializeUser((user: any, done) => {
   done(null, user.id);
@@ -20,6 +57,7 @@ passport.deserializeUser(async (id: string, done) => {
 });
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 
 // Google OAuth Strategy
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'placeholder-client-id';
@@ -28,7 +66,7 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'placeholder-cl
 passport.use(new GoogleStrategy({
     clientID: GOOGLE_CLIENT_ID,
     clientSecret: GOOGLE_CLIENT_SECRET,
-    callbackURL: "/api/auth/google/callback"
+    callbackURL: `${BACKEND_URL}/api/auth/google/callback`
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
@@ -36,7 +74,7 @@ passport.use(new GoogleStrategy({
       if (!email) return done(new Error("No email found from Google profile"));
       
       let user = await prisma.user.findUnique({ where: { email } });
-      if (!user) user = await prisma.user.create({ data: { email } });
+      if (!user) user = await createUserWithDefaults({ email });
       return done(null, user);
     } catch (err) {
       return done(err);
@@ -51,7 +89,7 @@ const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || 'placeholder-cl
 passport.use(new GitHubStrategy({
     clientID: GITHUB_CLIENT_ID,
     clientSecret: GITHUB_CLIENT_SECRET,
-    callbackURL: "/api/auth/github/callback"
+    callbackURL: `${BACKEND_URL}/api/auth/github/callback`
   },
   async (accessToken: any, refreshToken: any, profile: any, done: any) => {
     try {
@@ -62,7 +100,7 @@ passport.use(new GitHubStrategy({
       if (!user && email) user = await prisma.user.findUnique({ where: { email } });
       
       if (!user) {
-        user = await prisma.user.create({ data: { githubId, email } });
+        user = await createUserWithDefaults({ githubId, email });
       } else if (!user.githubId) {
         user = await prisma.user.update({ where: { id: user.id }, data: { githubId } });
       }
@@ -80,7 +118,7 @@ const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'placeholder-
 passport.use(new DiscordStrategy({
     clientID: DISCORD_CLIENT_ID,
     clientSecret: DISCORD_CLIENT_SECRET,
-    callbackURL: "/api/auth/discord/callback",
+    callbackURL: `${BACKEND_URL}/api/auth/discord/callback`,
     scope: ['identify', 'email']
   },
   async (accessToken, refreshToken, profile, done) => {
@@ -92,7 +130,7 @@ passport.use(new DiscordStrategy({
       if (!user && email) user = await prisma.user.findUnique({ where: { email } });
       
       if (!user) {
-        user = await prisma.user.create({ data: { discordId, email } });
+        user = await createUserWithDefaults({ discordId, email });
       } else if (!user.discordId) {
         user = await prisma.user.update({ where: { id: user.id }, data: { discordId } });
       }
@@ -110,7 +148,7 @@ const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET || 'placeholder-
 passport.use(new TwitterStrategy({
     clientID: TWITTER_CLIENT_ID,
     clientSecret: TWITTER_CLIENT_SECRET,
-    callbackURL: "/api/auth/twitter/callback",
+    callbackURL: `${BACKEND_URL}/api/auth/twitter/callback`,
     clientType: "confidential"
   },
   async (accessToken, refreshToken, profile, done) => {
@@ -118,8 +156,7 @@ passport.use(new TwitterStrategy({
       const twitterId = profile.id;
       
       let user = await prisma.user.findUnique({ where: { twitterId } });
-      // Twitter might not provide email depending on permissions, so just match by twitterId primarily.
-      if (!user) user = await prisma.user.create({ data: { twitterId } });
+      if (!user) user = await createUserWithDefaults({ twitterId });
       return done(null, user);
     } catch (err) {
       return done(err);
@@ -160,14 +197,14 @@ export const authRoutes = (app: any) => {
       const { data: message } = await SIWEObject.verify({ signature: req.body.signature, nonce: req.session.nonce });
 
       let user = await prisma.user.findUnique({ where: { walletAddress: message.address } });
-      if (!user) user = await prisma.user.create({ data: { walletAddress: message.address } });
+      if (!user) user = await createUserWithDefaults({ walletAddress: message.address });
       
       req.session.siwe = message;
       req.session.cookie.expires = new Date(message.expirationTime!);
       req.session.save(() => {
         req.login(user, (err: any) => {
           if (err) return res.status(500).json({ error: err.message });
-          res.status(200).send(true);
+          res.status(200).json({ success: true, user: { id: user!.id, username: user!.username } });
         });
       });
     } catch (e: any) {

@@ -12,12 +12,20 @@ export const setupAdmin = async (app: any) => {
         resource: { model: getModelByName('User'), client: prisma },
         options: {
           properties: {
-            // Can add specifics here if needed
+            // Hide sensitive fields from admin list
           }
         }
       },
       {
         resource: { model: getModelByName('ReferralReward'), client: prisma },
+        options: {}
+      },
+      {
+        resource: { model: getModelByName('MiningSession'), client: prisma },
+        options: {}
+      },
+      {
+        resource: { model: getModelByName('TaskCompletion'), client: prisma },
         options: {}
       }
     ],
@@ -26,10 +34,13 @@ export const setupAdmin = async (app: any) => {
 
   const admin = new AdminJS(adminOptions);
 
+  // Use environment variables for admin credentials
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@realmxai.com';
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.SESSION_SECRET || 'change-me-in-production';
+
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(admin, {
     authenticate: async (email, password) => {
-      // Seeded credentials from user comments
-      if (email === 'bagsniff@gmail.com' && password === 'admin123') {
+      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
         return { email, role: 'admin' };
       }
       return null;

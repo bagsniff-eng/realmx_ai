@@ -1,180 +1,73 @@
-Refine the existing REALMxAI Node dashboard UI to remove the “vibe-coded / soft SaaS” look and convert it into a precise, minimal, system-grade interface.
+1. Dashboard:
 
-Do NOT redesign the layout.
-Do NOT change structure.
-Only refine color system, lighting, motion, and visual discipline.
+The “Start Mining (6 h)” button toggles correctly to “Stop Session” and back
+realmx-ai.vercel.app
+. However, the “Manage Wallet” button does nothing—link it to the Wallet page or a modal for wallet operations.
+The Network Analytics graph toggles (24 H/7 D/ALL) highlight but don’t change the data. Implement real API calls to fetch network metrics or display a “No data available” message.
 
-🎨 COLOR SYSTEM (MAJOR FIX)
-❌ REMOVE
-excessive cyan glow
-gradient-heavy panels
-soft neon edges
-colorful UI cards
-✅ APPLY
+2. Leaderboard:
 
-Use a controlled, near-monochrome palette:
+The Global Nodes leaderboard always displays “No leaderboard data yet” even after clicking Refresh
+realmx-ai.vercel.app
+. Connect the page to backend data, and provide loading/error feedback when refreshing.
 
-Background: #0A0D10 (true dark, no tint)
-Surface: #0F1419
-Borders: rgba(255,255,255,0.06)
-Text primary: #E6EDF3
-Text secondary: #8B949E
-Accent (VERY LIMITED):
-Cyan: #2FE6D2
-👉 Use only for:
-active nav item
-tiny indicators
-key numbers (not everywhere)
+3. Node Operations:
 
-No glow. No blur halos.
+The “Restart Module” button works, but there’s no confirmation or feedback beyond a log entry
+realmx-ai.vercel.app
+. Add a confirmation dialog and progress indicators during the restart.
+The “View Logs” button is non-functional—attach it to a log viewer modal or page with filtering/search capabilities.
 
-💡 LIGHTING (CRITICAL)
+4. Mining Page:
 
-Replace “soft glow aesthetic” with:
+The mining controls mirror the dashboard and work, but the “View Detailed History” button is unresponsive
+realmx-ai.vercel.app
+. Create a detailed session history page showing past sessions, earnings and efficiency.
+Persist mining session state across page reloads to avoid accidental resets.
 
-👉 directional, subtle lighting
+5. Wallet (Digital Vault):
 
-faint top gradient (almost invisible)
-no radial glow blobs
-no heavy blur
-shadows should be sharp, not diffused
+The transfer form accepts input, but the “Initialise Relay Sequence” would submit a transaction without confirmation
+realmx-ai.vercel.app
+. Add input validation and a confirmation page summarizing the transaction details and fees before final submission.
+Display actual wallet balance and populate the “Recent History” section. Connect the dashboard’s “Manage Wallet” button here.
 
-Goal:
-👉 feel like hardware UI / terminal OS, not landing page
+6. Tasks:
 
-🧱 PANELS & CARDS
-❌ REMOVE
-glassmorphism blur
-thick gradients
-floating glow cards
-✅ APPLY
-flat surfaces
-very subtle elevation
-1px borders only
-clean spacing
+The Tasks page shows zero pending/completed tasks and “No objectives found.” Implement backend tasks and metrics. When no tasks exist, show a friendly placeholder message and indicate when new tasks may appear.
 
-Cards should feel:
-👉 “engineered” not “decorated”
+7. Referrals:
 
-🔤 TYPOGRAPHY REFINEMENT
+The “Copy Link” and “Share Code” buttons show a “Copied!” message but may not copy to clipboard reliably
+realmx-ai.vercel.app
+. Ensure robust clipboard functionality and provide fallback instructions.
+“View All Referrals” does nothing. Link it to a page listing referred users, their status and rewards. Explain referral rewards and credit schedules.
 
-Keep your current serif + system combo BUT:
+8. Profile:
 
-Fix hierarchy:
-Headlines → tighter, less dramatic
-Reduce oversized hero feel inside dashboard
-Increase spacing consistency
-Apply:
-More uppercase labels
-More mono/system feel for data
+The “Edit Profile” button isn’t connected to any editing functionality. Implement a profile editing form for changing the display name, avatar and contact details.
+Most account connection buttons (Google, Twitter/X, GitHub, Telegram) are non-functional
+realmx-ai.vercel.app
+. Add proper OAuth flows and indicate connection status.
+Some security toggles (e.g., hardware key) don’t respond; ensure all security settings work and show feedback messages.
 
-Example:
+9. Settings:
 
-NODE STATUS
-ACTIVE
+Several settings toggles (Auto‑start on boot, Resource allocation) don’t toggle; others (Stealth mode, Automatic updates, Notifications) do
+realmx-ai.vercel.app
+. Fix non-working toggles and save user preferences server-side.
+“Discard Changes” and “Save Configuration” buttons provide no confirmation—add success/error notifications and apply changes persistently.
+Consider replacing the simple “Resource allocation” toggle with a slider to specify CPU limits, and add explanatory tooltips.
 
-Instead of:
-“Node Status: Active”
+10. Top‑Right User Menu:
 
-⚡ ANIMATION (YOU WERE MISSING THIS — BUT DO IT RIGHT)
-❌ AVOID
-flashy motion
-bounce effects
-hover glow explosions
-✅ ADD HIGH-END MICRO MOTION
-1. DATA ANIMATION
-numbers count up on load
-progress bars fill smoothly (400–700ms)
-graphs animate in once
-2. STATUS INDICATORS
-small pulse (opacity only)
-no glow spread
-3. NAV INTERACTION
-active item slides in (2–4px)
-subtle highlight shift
-no glow
-4. PAGE TRANSITIONS
-fade + slight vertical shift (8px max)
-duration: 180–240ms
-🧠 LOADING / STATE DESIGN (REFINED)
+The identity & connections dropdown allows connecting a wallet and linking social accounts, but none of these controls launch any flows
+realmx-ai.vercel.app
+. Implement proper wallet connections (e.g., Web3) and social/OAuth integrations. Display connection status and provide options to disconnect.
 
-Replace “Module Initializing” with:
+11. Performance & UX:
 
-Inline system state (not center blocking)
-
-Example:
-
-SYNCING
-98.2%
-
-Small, precise, positioned near data — NOT centered big text.
-
-🧩 UI DENSITY (IMPORTANT)
-
-Your current version is too empty in the middle.
-
-Fix:
-increase information density slightly
-reduce large empty vertical gaps
-align elements to grid
-
-Make it feel:
-👉 “active system panel”
-NOT
-👉 “marketing space”
-
-🧭 SIDEBAR REFINEMENT
-❌ REMOVE
-glowing active state
-pill-style highlight
-✅ APPLY
-thin left indicator line
-subtle background shift
-icon + label alignment tightened
-🔘 BUTTONS
-❌ REMOVE
-gradient buttons
-soft rounded pills with glow
-✅ APPLY
-sharp rounded corners (6–8px)
-flat fill OR outline
-hover = slight brightness shift only
-📊 GRAPH STYLE
-Fix charts:
-thin lines (1.5px max)
-no gradient fill
-muted color base
-accent only on active point
-🧠 OVERALL FEEL
-
-After refinement, UI should feel:
-
-👉 controlled
-👉 engineered
-👉 intentional
-👉 slightly cold (this is GOOD)
-👉 high-trust
-
-NOT:
-👉 flashy
-👉 playful
-👉 over-designed
-
-⚠️ STRICT RULES
-No unnecessary glow
-No gradient abuse
-No random animations
-No redesigning layout
-No changing structure
-
-Only refine execution quality
-
-🧩 FINAL RESULT
-
-Your dashboard should feel like:
-
-👉 “a secure system interface powering something serious”
-
-NOT:
-
-👉 “a cool crypto app”
+Many sections show blank data due to missing API connections. Ensure all data-driven components call backend services and handle errors gracefully.
+Add loading indicators and skeleton screens so users know data is being fetched.
+Make interactive elements clearly distinguishable and disable buttons that currently have no functionality, or add informative tooltips (“Feature coming soon”).
+Improve responsiveness and accessibility: ensure proper color contrast, alt text, keyboard navigation, and mobile-friendly layouts.
