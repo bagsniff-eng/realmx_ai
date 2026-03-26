@@ -10,13 +10,13 @@ import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import { prisma } from './db.js';
 import passport, { authRoutes } from './auth.js';
 import { logger, morganMiddleware } from './logger.js';
-// xss-clean removed (deprecated) — use input validation per-route instead
+
 import referralRoutes from './referral.js';
 import userRoutes from './users.js';
 import tasksRoutes from './tasks.js';
 import miningRoutes from './mining.js';
 import walletRoutes from './wallet.js';
-import { setupAdmin } from './admin.js';
+
 
 dotenv.config();
 
@@ -41,10 +41,7 @@ app.use(cors({
   credentials: true
 }));
 
-// Setup Admin JS early so it isn't blocked by generic express json middleware
-setupAdmin(app).then((admin) => {
-  logger.info(`AdminJS started on ${admin.options.rootPath}`);
-}).catch(e => console.error("AdminJS init failed", e));
+
 
 // Body parsers
 app.use(express.json({ limit: '10kb' }));
@@ -88,7 +85,6 @@ app.get('/api/health', (req, res) => {
 });
 
 // Routes
-// The authRoutes are already mounted above via authRoutes(app);
 app.use('/api/referral', referralRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', tasksRoutes);
