@@ -81,10 +81,7 @@ function WalletProviderWrapper({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <ProviderStatusScreen
-      title="Initializing REALMxAI"
-      description="Loading secure wallet and session providers."
-    />
+    <div className="min-h-screen bg-realm-black" />
   );
 }
 

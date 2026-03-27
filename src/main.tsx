@@ -27,7 +27,7 @@ if (typeof window !== 'undefined') {
       return;
     }
     console.error('[REALMxAI] GLOBAL ERROR:', e.message, e.error?.stack);
-    document.body.innerHTML = `<div style="padding: 20px; color: red; background: black; z-index: 9999; position: absolute; inset: 0; font-family: monospace;"><h1>Global Error Catch</h1><pre>${e.message}\\n${e.error?.stack || ''}</pre></div>`;
+    document.body.innerHTML = `<div style="padding: 20px; color: red; background: black; z-index: 9999; position: absolute; inset: 0; font-family: 'IBM Plex Mono', monospace;"><h1>Global Error Catch</h1><pre>${e.message}\\n${e.error?.stack || ''}</pre></div>`;
   });
   window.addEventListener('unhandledrejection', (e) => {
     const message = e.reason?.message || String(e.reason || '');
@@ -37,16 +37,11 @@ if (typeof window !== 'undefined') {
       return;
     }
     console.error('[REALMxAI] UNHANDLED REJECTION:', message);
-    document.body.innerHTML = `<div style="padding: 20px; color: #ff55aa; background: black; z-index: 9999; position: absolute; inset: 0; font-family: monospace;"><h1>Unhandled Promise Rejection</h1><pre>${e.reason?.message || e.reason}\\n${e.reason?.stack || ''}</pre></div>`;
+    document.body.innerHTML = `<div style="padding: 20px; color: #ff55aa; background: black; z-index: 9999; position: absolute; inset: 0; font-family: 'IBM Plex Mono', monospace;"><h1>Unhandled Promise Rejection</h1><pre>${e.reason?.message || e.reason}\\n${e.reason?.stack || ''}</pre></div>`;
   });
 }
 
 console.log('[REALMxAI] Step 3: Checking root element');
-
-const rootEl = document.getElementById('root');
-if (rootEl) {
-  rootEl.innerHTML = '<div style="color: #3DF2E0; padding: 20px; font-family: monospace;">[1] Bootstrapping Application...</div>';
-}
 
 console.log('[REALMxAI] Step 4: Defining error boundary');
 
@@ -70,7 +65,7 @@ class AppErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ background: '#0A0D10', color: '#E6EDF3', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ background: '#0A0D10', color: '#E6EDF3', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Source Sans 3', sans-serif" }}>
           <div style={{ textAlign: 'center', padding: '2rem' }}>
             <h1 style={{ color: '#2FE6D2', fontSize: '1.5rem', marginBottom: '1rem' }}>REALMxAI</h1>
             <p style={{ color: '#8B949E', fontSize: '0.875rem' }}>System initialization failed. Please refresh or try again later.</p>
@@ -108,7 +103,7 @@ async function bootstrap() {
     console.log('[REALMxAI] Step 7: React render called successfully');
   } catch (err: any) {
     console.error('[REALMxAI] BOOTSTRAP FATAL:', err);
-    document.getElementById('root')!.innerHTML = `<div style="padding: 40px; color: #ff5555; background: #0A0D10; font-family: monospace; min-height: 100vh;">
+    document.getElementById('root')!.innerHTML = `<div style="padding: 40px; color: #ff5555; background: #0A0D10; font-family: 'IBM Plex Mono', monospace; min-height: 100vh;">
       <h1 style="color: #2FE6D2;">REALMxAI — Boot Failure</h1>
       <pre style="color: #ff5555; white-space: pre-wrap; margin-top: 20px;">${err?.message || err}\n\n${err?.stack || ''}</pre>
       <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 24px; background: #2FE6D2; color: #0A0D10; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">Reload</button>
