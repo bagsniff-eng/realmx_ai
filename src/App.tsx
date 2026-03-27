@@ -318,10 +318,44 @@ function getProfileChecks(user: any) {
 const SESSION_DURATION = 6 * 3600; // 6 hours in seconds
 const MINING_RATE_PER_HOUR = 10;
 const MINING_RATE_PER_SEC = MINING_RATE_PER_HOUR / 3600;
+const PENDING_REFERRAL_CODE_KEY = 'realmx_pending_referral_code';
 
 function buildReferralLink(code: string) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   return `${origin}/?ref=${encodeURIComponent(code)}`;
+}
+
+function getPendingReferralCode() {
+  if (typeof window === 'undefined') return null;
+
+  const urlCode = new URLSearchParams(window.location.search).get('ref');
+  if (urlCode?.trim()) {
+    return urlCode.trim().toUpperCase();
+  }
+
+  const storedCode = window.localStorage.getItem(PENDING_REFERRAL_CODE_KEY);
+  return storedCode?.trim() ? storedCode.trim().toUpperCase() : null;
+}
+
+function persistPendingReferralCode(code: string | null) {
+  if (typeof window === 'undefined') return;
+
+  if (!code) {
+    window.localStorage.removeItem(PENDING_REFERRAL_CODE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(PENDING_REFERRAL_CODE_KEY, code.trim().toUpperCase());
+}
+
+function clearReferralCodeFromUrl() {
+  if (typeof window === 'undefined') return;
+
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('ref')) return;
+
+  url.searchParams.delete('ref');
+  window.history.replaceState({}, '', url.toString());
 }
 
 function getMiningSession() {
@@ -346,6 +380,43 @@ function isSessionActive(): boolean {
   if (!sess || !sess.active) return false;
   const elapsed = Math.floor((Date.now() - sess.startedAt) / 1000);
   return elapsed < SESSION_DURATION;
+}
+
+const LEADERBOARD_AVATAR_VARIANTS = [
+  'from-realm-cyan/30 via-realm-cyan/10 to-white/5 border-realm-cyan/25 text-realm-cyan',
+  'from-amber-300/25 via-orange-400/10 to-white/5 border-amber-200/20 text-amber-200',
+  'from-emerald-300/25 via-emerald-400/10 to-white/5 border-emerald-200/20 text-emerald-200',
+  'from-fuchsia-300/20 via-purple-400/10 to-white/5 border-fuchsia-200/20 text-fuchsia-200',
+];
+
+function getLeaderboardAvatarVariant(seed: string, index = 0) {
+  const source = `${seed || 'node'}${index}`;
+  const hash = Array.from(source).reduce((sum, char, idx) => sum + char.charCodeAt(0) * (idx + 1), 0);
+  return LEADERBOARD_AVATAR_VARIANTS[hash % LEADERBOARD_AVATAR_VARIANTS.length];
+}
+
+function getAvatarInitial(label?: string | null) {
+  return (label || 'N').trim().charAt(0).toUpperCase() || 'N';
+}
+
+function LeaderboardAvatar({ entry, index }: { entry: any; index: number }) {
+  const variant = getLeaderboardAvatarVariant(entry?.publicId || entry?.name || '', index);
+  const initial = getAvatarInitial(entry?.name || entry?.publicId);
+
+  if (entry?.avatarUrl) {
+    return (
+      <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+        <img src={entry.avatarUrl} alt={entry.name || entry.publicId || 'Leaderboard avatar'} className="h-full w-full object-cover" />
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn('relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border bg-gradient-to-br shadow-[0_8px_24px_rgba(0,0,0,0.18)]', variant)}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.22),transparent_45%)]" />
+      <span className="relative text-sm font-semibold">{initial}</span>
+    </div>
+  );
 }
 
 // --- Components ---
@@ -891,9 +962,9 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <p className="text-[10px] font-mono text-realm-text-secondary tracking-[0.25em] uppercase mb-3">INFRASTRUCTURE LAYER v4.0</p>
+          <p className="text-[10px] font-mono text-realm-text-secondary tracking-[0.25em] uppercase mb-3">Your node at a glance</p>
           <h1 className="font-serif italic text-5xl text-white mb-5 leading-none tracking-tight">
-            System <span className="text-realm-cyan">Execution</span>
+            Your node, <span className="text-realm-cyan">live</span>
           </h1>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
@@ -919,7 +990,7 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
                 </div>
                 <div>
                    <h3 className="font-bold text-white text-lg">Active Mining Session</h3>
-                   <p className="text-xs text-white/40">Tap to contribute to the REALM network</p>
+                   <p className="text-xs text-white/40">Start a session and keep your node earning.</p>
                 </div>
               </div>
 
@@ -1017,9 +1088,9 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Operator Snapshot</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">Exact account state</h3>
+              <h3 className="mt-3 text-2xl font-semibold text-white">What is happening right now</h3>
               <p className="mt-2 max-w-xl text-sm text-white/40">
-                This panel uses exact counts and current state only: session progress, identity coverage, and actionable rewards.
+                A quick read on your session, identity setup, and rewards.
               </p>
             </div>
             <div className="rounded-2xl border border-realm-cyan/20 bg-realm-cyan/10 px-4 py-3 text-right">
@@ -1056,7 +1127,7 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Reward Forecast</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">What this node is on track to earn</h3>
+              <h3 className="mt-3 text-2xl font-semibold text-white">What you can expect to earn</h3>
             </div>
             <Zap size={18} className="text-realm-cyan" />
           </div>
@@ -1066,7 +1137,7 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
               <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Current 6h session</p>
               <p className="mt-3 text-3xl font-luciana text-white">{miningActive ? pendingRewards.toFixed(2) : '0.00'}</p>
               <p className="mt-2 text-xs text-white/40">
-                {miningActive ? `${nextSessionPayout.toFixed(2)} REALM left before full session completion.` : 'No active payout window. Start a new session to resume accrual.'}
+                {miningActive ? `${nextSessionPayout.toFixed(2)} REALM left before this session closes.` : 'No session is running. Start one to begin earning again.'}
               </p>
             </div>
 
@@ -1093,8 +1164,8 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
         <div className="col-span-12 glass-panel p-8">
            <div className="flex justify-between items-end mb-8">
              <div>
-               <h3 className="font-bold text-xl mb-1">Network Analytics</h3>
-               <p className="text-xs text-white/30">Your contribution to the global privacy layer</p>
+               <h3 className="font-bold text-xl mb-1">Network activity</h3>
+               <p className="text-xs text-white/30">A simple view of your place in the network.</p>
              </div>
              <div className="flex gap-2">
                {['24H', '7D', 'ALL'].map(t => (
@@ -1142,7 +1213,7 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Recent Activity</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">Why the node feels alive</h3>
+              <h3 className="mt-3 text-2xl font-semibold text-white">What changed recently</h3>
             </div>
             <Activity size={18} className="text-realm-cyan" />
           </div>
@@ -1169,7 +1240,7 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Next Actions</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">Fastest path to a stronger node</h3>
+              <h3 className="mt-3 text-2xl font-semibold text-white">Best next steps</h3>
             </div>
             <Bell size={18} className="text-realm-cyan" />
           </div>
@@ -1274,7 +1345,7 @@ const TasksPage = () => {
         <h1 className="text-serif text-6xl font-medium mb-4">
           Active <span className="text-realm-cyan">Objectives</span>
         </h1>
-        <p className="text-white/40 font-mono text-[10px] tracking-[0.3em] uppercase">Contribution layer & reward distribution system</p>
+<p className="text-white/40 font-mono text-[10px] tracking-[0.3em] uppercase">Tasks that help your node grow</p>
       </section>
 
       <div className="grid grid-cols-4 gap-6">
@@ -1311,7 +1382,7 @@ const TasksPage = () => {
           ) : tasks.length === 0 ? (
             <div className="glass-panel p-20 text-center space-y-4">
                <Activity size={48} className="mx-auto text-white/10" />
-               <p className="text-white/40 font-mono text-xs">No objectives found for your node signature.</p>
+<p className="text-white/40 font-mono text-xs">No tasks are available for this account yet.</p>
             </div>
           ) : (
             tasks.map((task, i) => (
@@ -1365,7 +1436,7 @@ const TasksPage = () => {
         <div className="col-span-12 lg:col-span-4 space-y-6">
           <div className="glass-panel p-8 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-realm-cyan/5 -mr-16 -mt-16 blur-3xl rounded-full" />
-            <h3 className="font-munich text-3xl text-white mb-8 lowercase">evolution <span className="text-realm-cyan">progress</span></h3>
+<h3 className="font-munich text-3xl text-white mb-8">progress <span className="text-realm-cyan">so far</span></h3>
             
             <div className="relative w-40 h-40 mx-auto mb-10">
               <svg className="w-full h-full transform -rotate-90">
@@ -1732,7 +1803,7 @@ const TasksPageV2 = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
 
         <div className="space-y-5">
           <div className="glass-panel p-6 sm:p-8">
-            <h3 className="font-munich text-3xl text-white">mission status</h3>
+<h3 className="font-munich text-3xl text-white">mission progress</h3>
             <div className="mt-8 flex items-center justify-center">
               <div className="relative flex h-40 w-40 items-center justify-center rounded-full border border-white/8">
                 <div className="absolute inset-3 rounded-full border border-realm-cyan/20" />
@@ -1812,8 +1883,8 @@ const ReferralsPage = () => {
   return (
     <div className="space-y-10">
       <section>
-        <h1 className="text-serif text-6xl font-medium mb-4">Network <span className="text-realm-cyan">Growth</span></h1>
-        <p className="text-white/50 font-mono text-sm tracking-wide">Expand the REALMxAI infrastructure and earn lifetime rewards.</p>
+<h1 className="text-serif text-6xl font-medium mb-4">Invite & <span className="text-realm-cyan">Earn</span></h1>
+<p className="text-white/50 font-mono text-sm tracking-wide">Invite people you trust and earn when they stay active.</p>
       </section>
 
       <div className="grid grid-cols-3 gap-6">
@@ -1831,7 +1902,7 @@ const ReferralsPage = () => {
 
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-7 glass-panel p-8">
-          <h3 className="text-serif text-2xl mb-8">Your Referral Link</h3>
+<h3 className="text-serif text-2xl mb-8">Your invite link</h3>
           <div className="space-y-6">
             <div className="p-4 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
               <code className="text-sm font-mono text-white/60">{referralLink}</code>
@@ -1862,7 +1933,7 @@ const ReferralsPage = () => {
         </div>
 
         <div className="col-span-5 glass-panel p-8">
-          <h3 className="text-serif text-2xl mb-6">Your Referred Nodes</h3>
+<h3 className="text-serif text-2xl mb-6">People you invited</h3>
           {loading ? (
             <div className="flex items-center justify-center h-40">
               <div className="w-6 h-6 border-2 border-realm-cyan border-t-transparent rounded-full animate-spin" />
@@ -1871,7 +1942,7 @@ const ReferralsPage = () => {
             <div className="flex flex-col items-center justify-center h-40 text-center gap-3">
               <Users size={32} className="text-white/20" />
               <p className="text-sm text-white/40">No referrals yet.</p>
-              <p className="text-xs text-white/25 font-mono">Share your link to earn rewards when friends join.</p>
+<p className="text-xs text-white/25 font-mono">Share your link and track who has joined through you.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -1985,8 +2056,8 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
   return (
     <div className="space-y-10">
       <section>
-        <h1 className="text-serif text-6xl font-medium mb-4">Mining <span className="text-realm-cyan">Yield</span></h1>
-        <p className="text-white/50 font-mono text-sm tracking-wide">Real-time resource monetization and reward tracking.</p>
+<h1 className="text-serif text-6xl font-medium mb-4">Mining <span className="text-realm-cyan">Overview</span></h1>
+<p className="text-white/50 font-mono text-sm tracking-wide">Track your current session, earnings, and payout timing.</p>
       </section>
 
       <div className="grid grid-cols-12 gap-6">
@@ -2061,7 +2132,7 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
 
         <div className="col-span-4 glass-panel p-8 flex flex-col justify-between">
           <div>
-            <h3 className="text-serif text-2xl mb-6">Yield Summary</h3>
+<h3 className="text-serif text-2xl mb-6">Earnings summary</h3>
             <div className="space-y-6">
               <div>
                 <p className="text-[10px] text-white/40 font-mono uppercase tracking-widest mb-1">Today</p>
@@ -2083,7 +2154,7 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
         </div>
 
         <div className="col-span-12 glass-panel p-8">
-          <h3 className="text-serif text-2xl mb-6">Recent Mining Events</h3>
+<h3 className="text-serif text-2xl mb-6">Recent mining activity</h3>
           <div className="space-y-4">
             {events.map((e, i) => (
               <div key={i} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
@@ -2106,7 +2177,7 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-realm-surface border border-realm-border p-6 rounded-xl w-[600px] max-w-[90vw] flex flex-col gap-4 max-h-[80vh]">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-realm-cyan" /> Mining History</h2>
+<h2 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} className="text-realm-cyan" /> Mining history</h2>
               <button onClick={() => setShowHistoryModal(false)} className="text-white/40 hover:text-white text-xl">&times;</button>
             </div>
             <div className="flex-1 overflow-y-auto space-y-4 pr-2">
@@ -2194,8 +2265,8 @@ const NodePage = () => {
   return (
     <div className="space-y-10">
       <section>
-        <h1 className="text-serif text-6xl font-medium mb-4">Node <span className="text-realm-cyan">Operations</span></h1>
-        <p className="text-white/50 font-mono text-sm tracking-wide">Live infrastructure control and validation layer.</p>
+<h1 className="text-serif text-6xl font-medium mb-4">Node <span className="text-realm-cyan">Status</span></h1>
+<p className="text-white/50 font-mono text-sm tracking-wide">Monitor performance, peers, and live activity in one place.</p>
       </section>
 
       <div className="grid grid-cols-12 gap-6">
@@ -2233,7 +2304,7 @@ const NodePage = () => {
         </div>
 
         <div className="col-span-8 glass-panel p-8">
-          <h3 className="text-serif text-2xl mb-6">Live Performance</h3>
+<h3 className="text-serif text-2xl mb-6">Performance</h3>
           <div className="grid grid-cols-4 gap-6">
             {[
               { label: 'Latency', value: `${latency}ms`, status: latency < 50 ? 'Optimal' : 'Degraded' },
@@ -2267,7 +2338,7 @@ const NodePage = () => {
         </div>
 
         <div className="col-span-12 glass-panel p-8">
-          <h3 className="text-serif text-2xl mb-6">Live Node Activity <span className="text-xs font-mono text-realm-cyan ml-2 animate-pulse">●  LIVE</span></h3>
+<h3 className="text-serif text-2xl mb-6">Live node activity <span className="text-xs font-mono text-realm-cyan ml-2 animate-pulse">●  LIVE</span></h3>
           <div className="space-y-3">
             {logs.slice(0, 8).map((log, i) => (
               <motion.div
@@ -2376,118 +2447,49 @@ const Leaderboard = () => {
     }
   };
 
-  const leader = entries[0] ?? null;
-  const podium = entries.slice(0, 3);
-  const activeCount = entries.filter((entry) => entry.isOnline || entry.status === 'Active').length;
-  const totalTrackedPoints = entries.reduce((sum, entry) => sum + Number(entry.points || entry.totalPoints || 0), 0);
-  const averagePoints = entries.length ? totalTrackedPoints / entries.length : 0;
-  const totalTasksCompleted = entries.reduce((sum, entry) => sum + Number(entry.tasks || 0), 0);
+  const rankedEntries = entries.slice(0, 100);
+  const leader = rankedEntries[0] ?? null;
+  const activeCount = rankedEntries.filter((entry) => entry.isOnline || entry.status === 'Active').length;
+  const totalTrackedPoints = rankedEntries.reduce((sum, entry) => sum + Number(entry.points || entry.totalPoints || 0), 0);
 
   return (
     <div className="space-y-8">
-      <section className="glass-panel overflow-hidden p-0">
-        <div className="grid gap-0 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="border-b border-white/5 p-8 md:p-10 xl:border-b-0 xl:border-r">
+      <section className="glass-panel p-6 sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
             <div className="flex flex-wrap items-center gap-3">
               <span className="rounded-full border border-realm-cyan/20 bg-realm-cyan/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-realm-cyan">
-                Network board
+                Top 100 contributors
               </span>
               <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/30">
                 Updated {lastUpdated.toLocaleTimeString()}
               </span>
             </div>
-            <h1 className="mt-6 max-w-3xl text-serif text-5xl md:text-6xl">
-              Active nodes, ranked by exact contribution instead of inflated trust theater.
+            <h1 className="mt-5 text-serif text-4xl sm:text-5xl lg:text-6xl">
+              A clean ranking of the people moving the network forward.
             </h1>
-            <p className="mt-4 max-w-2xl text-sm text-white/45">
-              This board stays grounded in live points, active mining sessions, and completed tasks so the network picture reads as credible at a glance.
+            <p className="mt-4 max-w-2xl text-sm text-white/45 sm:text-base">
+              Just the essentials: rank, public identity, live status, and points.
             </p>
-
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              {[
-                {
-                  label: 'Tracked nodes',
-                  value: networkStats?.totalUsers ?? entries.length,
-                  detail: `${entries.length} visible in the ranked board right now`,
-                  icon: Users,
-                },
-                {
-                  label: 'Live sessions',
-                  value: networkStats?.activeSessions ?? activeCount,
-                  detail: `${activeCount} active within the current ranked set`,
-                  icon: Activity,
-                },
-                {
-                  label: 'Tracked points',
-                  value: (networkStats?.totalPointsMined ?? totalTrackedPoints).toFixed(2),
-                  detail: 'Exact aggregate mined balance across the network',
-                  icon: Trophy,
-                },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.label} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">{item.label}</p>
-                      <Icon size={16} className="text-realm-cyan" />
-                    </div>
-                    <p className="mt-4 text-2xl font-semibold text-white">{item.value}</p>
-                    <p className="mt-2 text-xs text-white/35">{item.detail}</p>
-                  </div>
-                );
-              })}
-            </div>
           </div>
 
-          <div className="p-8 md:p-10">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Lead operator</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">{leader?.name || leader?.publicId || 'Awaiting data'}</h2>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Tracked', value: networkStats?.totalUsers ?? rankedEntries.length },
+              { label: 'Live', value: networkStats?.activeSessions ?? activeCount },
+              { label: 'Points', value: Number(networkStats?.totalPointsMined ?? totalTrackedPoints).toFixed(0) },
+            ].map((item) => (
+              <div key={item.label} className="min-w-[112px] rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">{item.label}</p>
+                <p className="mt-2 text-xl font-semibold text-white">{item.value}</p>
               </div>
-              <button
-                onClick={fetchLeaderboard}
-                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/55 hover:border-realm-cyan/30 hover:text-realm-cyan"
-              >
-                Refresh
-              </button>
-            </div>
-
-            <div className="mt-8 rounded-3xl border border-realm-cyan/15 bg-gradient-to-br from-realm-cyan/[0.12] via-realm-cyan/[0.05] to-transparent p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-realm-cyan/70">Top public id</p>
-                  <p className="mt-3 text-xl font-semibold text-white">{leader?.publicId || 'No live leader yet'}</p>
-                </div>
-                <div className="rounded-full border border-realm-cyan/20 bg-realm-black/20 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-realm-cyan">
-                  #{leader?.rank || 0}
-                </div>
-              </div>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Points held</p>
-                  <p className="mt-2 text-3xl font-semibold text-white">{Number(leader?.points || leader?.totalPoints || 0).toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Completed tasks</p>
-                  <p className="mt-2 text-3xl font-semibold text-white">{leader?.tasks ?? 0}</p>
-                </div>
-              </div>
-              <p className="mt-5 text-sm text-white/50">
-                {leader ? `${leader.isOnline ? 'Currently mining' : 'Currently idle'}, joined ${new Date(leader.joinedAt).toLocaleDateString()}.` : 'The lead slot fills as soon as the first node starts earning.'}
-              </p>
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Average points</p>
-                <p className="mt-3 text-2xl font-semibold text-white">{averagePoints.toFixed(2)}</p>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Completed tasks tracked</p>
-                <p className="mt-3 text-2xl font-semibold text-white">{totalTasksCompleted}</p>
-              </div>
-            </div>
+            ))}
+            <button
+              onClick={fetchLeaderboard}
+              className="rounded-2xl border border-white/10 px-4 py-3 text-xs font-mono uppercase tracking-[0.18em] text-white/55 hover:border-realm-cyan/30 hover:text-realm-cyan"
+            >
+              Refresh
+            </button>
           </div>
         </div>
       </section>
@@ -2506,129 +2508,89 @@ const Leaderboard = () => {
         <div className="glass-panel flex flex-col items-center justify-center gap-3 p-12 text-center">
           <Trophy size={36} className="text-white/20" />
           <p className="text-sm text-white/40">No leaderboard data yet.</p>
-          <p className="text-xs font-mono text-white/25">As users connect and mine, this board will populate automatically.</p>
+          <p className="text-xs font-mono text-white/25">Once people connect and start mining, rankings will appear here automatically.</p>
         </div>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-          <div className="glass-panel p-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-serif text-3xl">Top cluster</h3>
-                <p className="mt-2 text-sm text-white/40">The current front of the network, based on exact wallet points.</p>
-              </div>
-              <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
-                {activeCount} live
-              </div>
+        <div className="glass-panel p-4 sm:p-5 lg:p-6">
+          <div className="mb-5 flex flex-col gap-4 border-b border-white/5 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-serif text-3xl">Leaderboard</h3>
+              <p className="mt-2 text-sm text-white/40">
+                Showing the top {rankedEntries.length} contributors with public ids, points, and live status only.
+              </p>
             </div>
-            <div className="mt-8 space-y-4">
-              {podium.map((entry, index) => (
-                <motion.div
-                  key={entry.publicId}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className={cn(
-                    'rounded-3xl border p-5',
-                    index === 0 ? 'border-realm-cyan/20 bg-realm-cyan/[0.08]' : 'border-white/8 bg-white/[0.02]'
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4">
-                      <div className={cn(
-                        'flex h-12 w-12 items-center justify-center rounded-2xl border text-sm font-mono',
-                        index === 0 ? 'border-realm-cyan/30 bg-realm-cyan/10 text-realm-cyan' : 'border-white/10 bg-white/[0.03] text-white/60'
-                      )}>
-                        #{entry.rank}
-                      </div>
-                      <div>
-                        <p className="text-lg font-semibold text-white">{entry.name || entry.publicId}</p>
-                        <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">{entry.publicId}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Points</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">{Number(entry.points || entry.totalPoints || 0).toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <div className="mt-5 flex flex-wrap items-center gap-3">
-                    <span className={cn(
-                      'rounded-full px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em]',
-                      entry.isOnline ? 'bg-realm-cyan/10 text-realm-cyan' : 'bg-white/5 text-white/45'
-                    )}>
-                      {entry.isOnline ? 'Live now' : 'Idle'}
-                    </span>
-                    <span className="text-xs text-white/45">{entry.tasks} completed tasks</span>
-                    <span className="text-xs text-white/35">Joined {new Date(entry.joinedAt).toLocaleDateString()}</span>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+            {leader && (
+              <div className="rounded-2xl border border-realm-cyan/15 bg-realm-cyan/[0.06] px-4 py-3">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-realm-cyan/70">Top contributor</p>
+                <p className="mt-2 text-sm font-semibold text-white">{leader.name || leader.publicId}</p>
+              </div>
+            )}
           </div>
 
-          <div className="glass-panel overflow-hidden p-0">
-            <div className="border-b border-white/5 px-6 py-5 md:px-8">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-serif text-3xl">Ranked roster</h3>
-                  <p className="mt-2 text-sm text-white/40">Public ids only, with exact points, task counts, and current activity state.</p>
-                </div>
-                <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
-                  {entries.length} shown
-                </div>
-              </div>
-            </div>
-
-            <div className="divide-y divide-white/5">
-              {entries.map((entry: any, index: number) => (
-                <motion.div
-                  key={entry.publicId || entry.name || index}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.025 }}
-                  className="px-6 py-5 transition-colors hover:bg-white/[0.02] md:px-8"
-                >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className={cn(
-                        'flex h-10 w-10 items-center justify-center rounded-2xl border text-sm font-mono',
-                        index < 3 ? 'border-realm-cyan/25 bg-realm-cyan/10 text-realm-cyan' : 'border-white/10 bg-white/[0.03] text-white/55'
-                      )}>
-                        #{entry.rank}
-                      </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <p className="font-semibold text-white">{entry.name || entry.publicId}</p>
-                          <span className={cn(
-                            'rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em]',
-                            entry.isOnline ? 'bg-realm-cyan/10 text-realm-cyan' : 'bg-white/5 text-white/40'
-                          )}>
-                            {entry.isOnline ? 'Active' : 'Offline'}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/35">
-                          <span className="font-mono uppercase tracking-[0.18em] text-white/30">{entry.publicId}</span>
-                          <span>{entry.tasks} tasks synced</span>
-                          <span>Joined {new Date(entry.joinedAt).toLocaleDateString()}</span>
-                        </div>
-                      </div>
+          <div className="space-y-3">
+            {rankedEntries.map((entry: any, index: number) => (
+              <motion.div
+                key={entry.publicId || entry.name || index}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(index * 0.015, 0.35) }}
+                className={cn(
+                  'rounded-[24px] border px-4 py-4 shadow-[0_14px_40px_rgba(0,0,0,0.14)] transition-colors sm:px-5',
+                  index < 3
+                    ? 'border-realm-cyan/15 bg-gradient-to-r from-realm-cyan/[0.08] to-transparent hover:border-realm-cyan/30'
+                    : 'border-white/8 bg-white/[0.02] hover:border-white/14'
+                )}
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className={cn(
+                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border text-[11px] font-mono',
+                      index < 3 ? 'border-realm-cyan/25 bg-realm-cyan/10 text-realm-cyan' : 'border-white/10 bg-realm-black/20 text-white/55'
+                    )}>
+                      #{entry.rank}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 md:justify-end">
-                      <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3 text-right">
-                        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Points</p>
-                        <p className="mt-1 text-lg font-semibold text-white">{Number(entry.points || entry.totalPoints || 0).toFixed(2)}</p>
+                    <LeaderboardAvatar entry={entry} index={index} />
+
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="truncate text-sm font-semibold text-white sm:text-base">{entry.name || entry.publicId}</p>
+                        <span className={cn(
+                          'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em]',
+                          entry.isOnline ? 'bg-realm-cyan/10 text-realm-cyan' : 'bg-white/5 text-white/40'
+                        )}>
+                          <span className={cn('h-1.5 w-1.5 rounded-full', entry.isOnline ? 'bg-realm-cyan' : 'bg-white/25')} />
+                          {entry.isOnline ? 'Live' : 'Idle'}
+                        </span>
                       </div>
-                      <button
-                        onClick={() => handleCopyPublicId(entry.publicId || entry.username || '')}
-                        className="rounded-xl border border-white/10 px-4 py-3 text-xs font-mono uppercase tracking-[0.18em] text-white/55 hover:border-realm-cyan/30 hover:text-realm-cyan"
-                      >
-                        {copiedEntryId === (entry.publicId || entry.username) ? 'Copied' : 'Copy id'}
-                      </button>
+                      <p className="mt-1 truncate text-xs font-mono uppercase tracking-[0.18em] text-white/30">
+                        {entry.publicId}
+                      </p>
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
+
+                  <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+                    <div className="rounded-2xl border border-white/8 bg-realm-black/20 px-4 py-3 text-right">
+                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Points</p>
+                      <p className="mt-1 text-lg font-semibold text-white sm:text-xl">
+                        {Number(entry.points || entry.totalPoints || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleCopyPublicId(entry.publicId || entry.username || '')}
+                      className={cn(
+                        'rounded-2xl border px-4 py-3 text-xs font-mono uppercase tracking-[0.18em] transition-colors',
+                        copiedEntryId === (entry.publicId || entry.username)
+                          ? 'border-realm-cyan/35 bg-realm-cyan/10 text-realm-cyan'
+                          : 'border-white/10 text-white/55 hover:border-realm-cyan/30 hover:text-realm-cyan'
+                      )}
+                    >
+                      {copiedEntryId === (entry.publicId || entry.username) ? 'Copied' : 'Copy id'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
           </div>
         </div>
       )}
@@ -2677,9 +2639,9 @@ const SettingsPage = () => {
 
       <section>
         <div>
-          <h1 className="text-serif text-5xl font-medium mb-4">Account <span className="text-realm-cyan">Controls</span></h1>
+          <h1 className="text-serif text-5xl font-medium mb-4">Account <span className="text-realm-cyan">Settings</span></h1>
           <p className="max-w-2xl text-white/50 font-mono text-sm tracking-wide">
-            Minimal local controls for refresh behavior, notification signal, and identity disclosure in this browser.
+            Adjust refresh behavior, alerts, and privacy settings for this browser.
           </p>
         </div>
       </section>
@@ -2715,7 +2677,7 @@ const SettingsPage = () => {
           <div>
             <h3 className="text-serif text-3xl">Workspace behavior</h3>
             <p className="mt-2 text-sm text-white/40">
-              Real controls for how aggressively the app refreshes and how much balance detail it exposes on screen.
+              Decide how actively the app refreshes and how much balance detail stays visible on screen.
             </p>
           </div>
           <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
@@ -2727,7 +2689,7 @@ const SettingsPage = () => {
           <div className="flex flex-col gap-4 border-b border-white/5 pb-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
               <p className="font-medium text-white">Auto refresh cadence</p>
-              <p className="text-xs text-white/40 font-mono">This changes how often balance and network surfaces re-poll while the dashboard stays open.</p>
+              <p className="text-xs text-white/40 font-mono">Choose how often the dashboard refreshes while you keep it open.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {[15000, 60000, 180000].map((value) => (
@@ -2753,7 +2715,7 @@ const SettingsPage = () => {
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1 pr-6">
               <p className="font-medium text-white">Hide point balances on shared screens</p>
-              <p className="text-xs text-white/40 font-mono">Masks the top-bar point balance and any future operator summary surfaces in this browser.</p>
+              <p className="text-xs text-white/40 font-mono">Hide balances in the top bar and other shared parts of the app on this browser.</p>
             </div>
             <button
               onClick={() => updatePreferences((current) => ({
@@ -2776,7 +2738,7 @@ const SettingsPage = () => {
           <div>
             <h3 className="text-serif text-3xl">Notifications that matter</h3>
             <p className="mt-2 text-sm text-white/40">
-              Keep the feed focused on account changes, claimable progress, and balance movement instead of decorative noise.
+              Keep the feed focused on meaningful account changes instead of background noise.
             </p>
           </div>
           <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
@@ -2835,9 +2797,9 @@ const SettingsPage = () => {
       <div className="glass-panel p-8 space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-serif text-3xl">Identity exposure</h3>
+            <h3 className="text-serif text-3xl">Identity visibility</h3>
             <p className="mt-2 text-sm text-white/40">
-              These controls influence what the profile screen reveals and how visible your recovery handles are during normal operation.
+              Control how much of your identity is shown across the product.
             </p>
           </div>
           <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
@@ -2917,7 +2879,7 @@ const SettingsPage = () => {
       </div>
 
       <div className="glass-panel p-8">
-        <h3 className="text-serif text-3xl">Notes</h3>
+        <h3 className="text-serif text-3xl">What these settings mean</h3>
         <div className="mt-5 space-y-3">
           {trustNotes.map((note) => (
             <div key={note} className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.02] p-4">
@@ -2937,7 +2899,7 @@ const SettingsPage = () => {
           }}
           className="px-8 py-3 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/5 transition-all"
         >
-          Reset Defaults
+          Reset
         </button>
         <button
           onClick={() => {
@@ -2946,7 +2908,7 @@ const SettingsPage = () => {
           }}
           className="px-8 py-3 bg-realm-cyan text-realm-black rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(61,242,224,0.3)] transition-all"
         >
-          Save Preferences
+          Save settings
         </button>
       </div>
     </div>
@@ -3038,9 +3000,9 @@ const WalletPage = () => {
     <div className="space-y-12">
       <section>
         <h1 className="text-serif text-6xl font-medium mb-4">
-          Digital <span className="text-realm-cyan">Vault</span>
+          Wallet <span className="text-realm-cyan">Overview</span>
         </h1>
-        <p className="text-white/40 font-mono text-xs tracking-[0.2em] uppercase">Private Asset Management & Peer Transfer Protocol</p>
+        <p className="text-white/40 font-mono text-xs tracking-[0.2em] uppercase">Balances, payout history, and private transfers</p>
       </section>
 
       <div className="grid grid-cols-12 gap-8">
@@ -3094,18 +3056,18 @@ const WalletPage = () => {
           </div>
 
           <div className="glass-panel p-8">
-            <h4 className="font-bold text-lg mb-6 flex items-center gap-2">
+              <h4 className="font-bold text-lg mb-6 flex items-center gap-2">
               <Activity size={18} className="text-realm-cyan" />
-              Recent History
+              Recent activity
             </h4>
             <div className="space-y-6">
               {history.length === 0 ? (
-                <p className="text-xs text-white/20 font-mono">No recent activity detected.</p>
+                <p className="text-xs text-white/20 font-mono">No recent wallet activity yet.</p>
               ) : (
                 history.map((h, i) => (
                   <div key={i} className="flex justify-between items-center text-[11px] font-mono border-b border-white/5 pb-4 last:border-0 hover:border-realm-cyan/20 transition-all">
                     <div className="space-y-1">
-                      <p className="text-white/60">Node Reward</p>
+                      <p className="text-white/60">Reward payout</p>
                       <p className="text-[9px] text-white/20">{new Date(h.startedAt).toLocaleDateString()}</p>
                     </div>
                     <p className="text-realm-cyan">+{h.pointsEarned.toFixed(2)}</p>
@@ -3118,8 +3080,8 @@ const WalletPage = () => {
 
         <div className="col-span-12 lg:col-span-8 glass-panel p-12">
           <div className="max-w-xl">
-            <h3 className="text-3xl font-bold mb-2">Execute Transfer</h3>
-            <p className="text-sm text-white/40 mb-10">Relay assets between network nodes using the internal privacy protocol.</p>
+            <h3 className="text-3xl font-bold mb-2">Send a transfer</h3>
+            <p className="text-sm text-white/40 mb-10">Move REALM to another user by username without exposing email or wallet details.</p>
             
             <div className="space-y-8">
               <div className="space-y-3">
@@ -3137,7 +3099,7 @@ const WalletPage = () => {
                     spellCheck={false}
                   />
                 </div>
-                <p className="text-[11px] text-white/30 font-mono">Username only. Email and wallet lookups are disabled for transfers.</p>
+                <p className="text-[11px] text-white/30 font-mono">Transfers only work with usernames. Email and wallet lookups stay hidden.</p>
               </div>
 
               <div className="space-y-3">
@@ -3159,7 +3121,7 @@ const WalletPage = () => {
                    <div className="w-8 h-8 rounded-full bg-realm-cyan/10 flex items-center justify-center text-realm-cyan">
                      <ShieldCheck size={16} />
                    </div>
-                   <p className="text-[10px] text-white/60 font-mono uppercase tracking-widest">Secured Transaction</p>
+                   <p className="text-[10px] text-white/60 font-mono uppercase tracking-widest">Secure transfer</p>
                 </div>
                 <p className="text-[10px] text-white/20 font-mono uppercase">Fee: 0.00%</p>
               </div>
@@ -3182,7 +3144,7 @@ const WalletPage = () => {
                 {transferring ? (
                   <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <>Initialise Relay Sequence <ArrowUpRight size={18} /></>
+                  <>Send transfer <ArrowUpRight size={18} /></>
                 )}
               </button>
             </div>
@@ -3194,7 +3156,7 @@ const WalletPage = () => {
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-realm-surface border border-realm-border p-6 rounded-xl w-[400px] max-w-[90vw] flex flex-col gap-6">
-            <h2 className="text-xl font-bold text-white text-center">Confirm Transfer</h2>
+            <h2 className="text-xl font-bold text-white text-center">Confirm transfer</h2>
             <div className="space-y-4">
               <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
                 <span className="text-white/40">Amount</span>
@@ -3211,7 +3173,7 @@ const WalletPage = () => {
             </div>
             
             <p className="text-[10px] text-yellow-400/80 text-center font-mono leading-relaxed px-4">
-              Transfers are final and irreversible. Ensure the recipient identity is correct.
+              Transfers are final. Double-check the username before sending.
             </p>
 
             <div className="flex gap-4">
@@ -3459,7 +3421,7 @@ const Profile = () => {
                   {user?.name || user?.email?.split('@')[0] || maskedWallet || 'Anonymous Node'}
                 </h1>
                 <p className="mt-3 max-w-xl text-sm text-white/50">
-                  Identity-backed account record with live provider state and exact counts only.
+                  Your account, linked identities, and profile details in one place.
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3 text-sm text-white/55">
                   {user?.username && <span className="text-realm-cyan">@{user.username}</span>}
@@ -3475,7 +3437,7 @@ const Profile = () => {
               <div>
                 <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Identity checks</p>
                 <p className="mt-3 text-4xl font-semibold text-realm-cyan">{completedProfileChecks}/{profileCheckTotal}</p>
-                <p className="mt-2 text-sm text-white/45">Exact completion count, not a synthetic score.</p>
+                <p className="mt-2 text-sm text-white/45">A simple count of what is already set up.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
@@ -3519,9 +3481,9 @@ const Profile = () => {
       <div className="glass-panel p-10 space-y-6">
         <div className="flex items-start justify-between gap-6">
           <div>
-            <h3 className="text-serif text-3xl">Account record</h3>
+            <h3 className="text-serif text-3xl">Account overview</h3>
             <p className="mt-2 text-sm text-white/40">
-              These rows use exact states and counts only, so the account surface stays grounded.
+              A clear summary of your setup, rewards, and current privacy posture.
             </p>
           </div>
           <div className="rounded-2xl border border-realm-cyan/20 bg-realm-cyan/10 px-5 py-4 text-right">
@@ -3534,17 +3496,17 @@ const Profile = () => {
           <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
             <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Identity checks</p>
             <p className="mt-4 text-2xl font-semibold text-white">{completedProfileChecks}/{profileCheckTotal}</p>
-            <p className="mt-1 text-xs text-white/35">Name, handle, avatar, primary identity, and recovery coverage</p>
+            <p className="mt-1 text-xs text-white/35">Name, handle, avatar, primary login, and recovery coverage</p>
           </div>
           <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
             <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Verified payouts</p>
             <p className="mt-4 text-2xl font-semibold text-white">{completedSessions.length}</p>
-            <p className="mt-1 text-xs text-white/35">Completed mining sessions with credited rewards</p>
+            <p className="mt-1 text-xs text-white/35">Completed mining sessions that paid out successfully</p>
           </div>
           <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
             <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Profile disclosure</p>
             <p className="mt-4 text-2xl font-semibold text-white">{disclosureLabel}</p>
-            <p className="mt-1 text-xs text-white/35">Mirrors the active privacy posture configured in Settings</p>
+            <p className="mt-1 text-xs text-white/35">Matches the visibility setting you chose in Settings</p>
           </div>
         </div>
       </div>
@@ -3552,9 +3514,9 @@ const Profile = () => {
       <div className="glass-panel p-10 space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-serif text-3xl">Identity hardening checklist</h3>
+            <h3 className="text-serif text-3xl">Profile checklist</h3>
             <p className="mt-2 text-sm text-white/40">
-              A trustworthy profile should explain what is still missing and why it matters.
+              A quick list of what is done and what still needs attention.
             </p>
           </div>
           <a href="/?tab=settings" className="text-sm text-realm-cyan hover:text-white transition-colors">
@@ -3584,9 +3546,9 @@ const Profile = () => {
       <div className="glass-panel p-10 space-y-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-serif text-3xl">Connected identities</h3>
+            <h3 className="text-serif text-3xl">Connected accounts</h3>
             <p className="mt-2 text-sm text-white/40">
-              Every row here maps to a real provider state. No placeholders, no meaningless toggles.
+              These rows reflect the real status of each connected account.
             </p>
           </div>
           <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
@@ -3645,10 +3607,10 @@ const Profile = () => {
         <div className="glass-panel p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-serif text-3xl">Profile disclosure preview</h3>
-              <p className="mt-2 text-sm text-white/40">
-                This is the visible identity posture created by your current settings.
-              </p>
+            <h3 className="text-serif text-3xl">Profile preview</h3>
+            <p className="mt-2 text-sm text-white/40">
+              This is how your profile details appear with your current settings.
+            </p>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
               {preferences.privacy.maskWalletAddress ? <EyeOff size={12} /> : <Eye size={12} />}
@@ -3669,10 +3631,10 @@ const Profile = () => {
         <div className="glass-panel p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-serif text-3xl">Operational posture</h3>
-              <p className="mt-2 text-sm text-white/40">
-                The account reads as more credible when privacy, refresh behavior, and alerts are internally consistent.
-              </p>
+            <h3 className="text-serif text-3xl">Current setup</h3>
+            <p className="mt-2 text-sm text-white/40">
+              Your privacy, alerts, and refresh settings work best when they stay aligned.
+            </p>
             </div>
             <Globe size={18} className="text-realm-cyan" />
           </div>
@@ -3722,7 +3684,7 @@ const Profile = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-realm-surface border border-realm-border p-8 rounded-xl w-[400px] max-w-[90vw] flex flex-col gap-6">
             <div className="flex justify-between items-center border-b border-white/5 pb-4">
-              <h2 className="text-xl font-bold text-white">Edit Profile</h2>
+              <h2 className="text-xl font-bold text-white">Edit profile</h2>
               <button onClick={() => setShowEditModal(false)} className="text-white/40 hover:text-white text-2xl">&times;</button>
             </div>
             <div className="space-y-4">
@@ -3733,7 +3695,7 @@ const Profile = () => {
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:border-realm-cyan outline-none transition-all"
-                  placeholder="Enter new name"
+                  placeholder="Your display name"
                 />
               </div>
               <div className="space-y-2">
@@ -3756,7 +3718,7 @@ const Profile = () => {
                     onClick={() => fileInputRef.current?.click()}
                     className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white/60 hover:text-white hover:border-realm-cyan transition-all"
                   >
-                    {editAvatar ? 'Change Photo' : 'Upload Photo'}
+                    {editAvatar ? 'Change photo' : 'Upload photo'}
                   </button>
                   {editAvatar && (
                     <button type="button" onClick={() => setEditAvatar('')} className="text-xs text-red-400 hover:text-red-300">
@@ -3810,10 +3772,69 @@ export default function App() {
     const allowedTabs = new Set(['dashboard', 'leaderboard', 'node', 'mining', 'wallet', 'tasks', 'referrals', 'profile', 'settings']);
     return tab && allowedTabs.has(tab) ? tab : 'dashboard';
   });
-
   // ---- Shared Mining Session State ----
   const [miningActive, setMiningActive] = useState<boolean>(() => isSessionActive());
   const [sessionSecs, setSessionSecs] = useState<number>(() => getSessionElapsed());
+
+  useEffect(() => {
+    const pendingReferralCode = getPendingReferralCode();
+    if (!pendingReferralCode) return;
+
+    persistPendingReferralCode(pendingReferralCode);
+    clearReferralCodeFromUrl();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncPendingReferral = async () => {
+      const pendingReferralCode = getPendingReferralCode();
+      if (!pendingReferralCode) {
+        return;
+      }
+
+      try {
+        const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!meRes.ok) {
+          return;
+        }
+
+        const me = await meRes.json();
+        if (cancelled || !me?.id) {
+          return;
+        }
+
+        const referralRes = await fetch('/api/referral', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ code: pendingReferralCode }),
+        });
+
+        const referralData = await referralRes.json().catch(() => ({}));
+        if (cancelled) return;
+
+        if (referralRes.ok) {
+          persistPendingReferralCode(null);
+          window.dispatchEvent(new Event('balance-updated'));
+          return;
+        }
+
+        const errorMessage = String(referralData?.error || '').toLowerCase();
+        if (errorMessage.includes('already referred') || errorMessage.includes('cannot refer yourself')) {
+          persistPendingReferralCode(null);
+        }
+      } catch {
+        // Leave the stored referral intact so it can be retried after the next successful auth/session load.
+      }
+    };
+
+    syncPendingReferral();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -3908,6 +3929,10 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, [miningActive]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [activeTab]);
 
 
   const handleMiningAction = async () => {
