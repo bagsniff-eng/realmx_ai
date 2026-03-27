@@ -505,7 +505,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <header className="fixed top-0 right-0 left-0 md:left-60 h-20 border-b border-realm-border bg-realm-black/80 backdrop-blur-sm z-40 px-4 md:px-8 flex items-center justify-between">
+    <header className="fixed top-0 right-0 left-0 md:left-60 h-20 border-b border-realm-border bg-realm-black/95 md:bg-realm-black/80 md:backdrop-blur-sm z-40 px-4 md:px-8 flex items-center justify-between">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-realm-text-secondary text-[10px] font-mono tracking-widest uppercase">
           <div className="w-1.5 h-1.5 bg-realm-cyan rounded-full opacity-80" />
