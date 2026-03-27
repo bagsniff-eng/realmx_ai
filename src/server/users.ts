@@ -59,8 +59,6 @@ router.get('/leaderboard', async (req, res) => {
       select: {
         id: true,
         username: true,
-        email: true,
-        walletAddress: true,
         name: true,
         avatarUrl: true,
         points: true,

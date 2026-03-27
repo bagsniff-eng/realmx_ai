@@ -2312,6 +2312,7 @@ const NodePage = () => {
 
 const Leaderboard = () => {
   const [entries, setEntries] = useState<any[]>([]);
+  const [networkStats, setNetworkStats] = useState<{ totalUsers: number; activeSessions: number; totalPointsMined: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -2321,18 +2322,28 @@ const Leaderboard = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/users/leaderboard', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setEntries(data);
-        setLastUpdated(new Date());
-      } else {
-        setError('Failed to fetch leaderboard data.');
+      const [leaderboardRes, statsRes] = await Promise.all([
+        fetch('/api/users/leaderboard', { credentials: 'include' }),
+        fetch('/api/users/stats', { credentials: 'include' }),
+      ]);
+
+      if (!leaderboardRes.ok) {
+        throw new Error('Failed to fetch leaderboard data.');
       }
-    } catch (e) {
-      setError('Network error. Could not connect to servers.');
+
+      const leaderboardData = await leaderboardRes.json();
+      setEntries(Array.isArray(leaderboardData) ? leaderboardData : []);
+
+      if (statsRes.ok) {
+        setNetworkStats(await statsRes.json());
+      }
+
+      setLastUpdated(new Date());
+    } catch (e: any) {
+      setError(e?.message || 'Network error. Could not connect to servers.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -2351,98 +2362,262 @@ const Leaderboard = () => {
     }
   };
 
+  const leader = entries[0] ?? null;
+  const podium = entries.slice(0, 3);
+  const activeCount = entries.filter((entry) => entry.isOnline || entry.status === 'Active').length;
+  const totalTrackedPoints = entries.reduce((sum, entry) => sum + Number(entry.points || entry.totalPoints || 0), 0);
+  const averagePoints = entries.length ? totalTrackedPoints / entries.length : 0;
+  const totalTasksCompleted = entries.reduce((sum, entry) => sum + Number(entry.tasks || 0), 0);
+
   return (
-    <div className="space-y-10">
-      <section>
-        <div className="flex items-end justify-between">
-          <div>
-            <h1 className="text-serif text-6xl font-medium mb-4">Global <span className="text-realm-cyan">Nodes</span></h1>
-            <p className="text-white/50 font-mono text-sm tracking-wide">Top contributors to the REALMxAI privacy network.</p>
+    <div className="space-y-8">
+      <section className="glass-panel overflow-hidden p-0">
+        <div className="grid gap-0 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="border-b border-white/5 p-8 md:p-10 xl:border-b-0 xl:border-r">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-realm-cyan/20 bg-realm-cyan/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-realm-cyan">
+                Network board
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/30">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            </div>
+            <h1 className="mt-6 max-w-3xl text-serif text-5xl md:text-6xl">
+              Active nodes, ranked by exact contribution instead of inflated trust theater.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm text-white/45">
+              This board stays grounded in live points, active mining sessions, and completed tasks so the network picture reads as credible at a glance.
+            </p>
+
+            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+              {[
+                {
+                  label: 'Tracked nodes',
+                  value: networkStats?.totalUsers ?? entries.length,
+                  detail: `${entries.length} visible in the ranked board right now`,
+                  icon: Users,
+                },
+                {
+                  label: 'Live sessions',
+                  value: networkStats?.activeSessions ?? activeCount,
+                  detail: `${activeCount} active within the current ranked set`,
+                  icon: Activity,
+                },
+                {
+                  label: 'Tracked points',
+                  value: (networkStats?.totalPointsMined ?? totalTrackedPoints).toFixed(2),
+                  detail: 'Exact aggregate mined balance across the network',
+                  icon: Trophy,
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.label} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">{item.label}</p>
+                      <Icon size={16} className="text-realm-cyan" />
+                    </div>
+                    <p className="mt-4 text-2xl font-semibold text-white">{item.value}</p>
+                    <p className="mt-2 text-xs text-white/35">{item.detail}</p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="flex items-center gap-3 pb-4">
-            <span className="text-[10px] text-white/30 font-mono">Updated {lastUpdated.toLocaleTimeString()}</span>
-            <button
-              onClick={fetchLeaderboard}
-              className="px-3 py-1.5 text-[10px] font-mono border border-realm-border rounded hover:border-realm-cyan hover:text-realm-cyan transition-colors"
-            >
-              Refresh
-            </button>
+
+          <div className="p-8 md:p-10">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Lead operator</p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">{leader?.name || leader?.publicId || 'Awaiting data'}</h2>
+              </div>
+              <button
+                onClick={fetchLeaderboard}
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/55 hover:border-realm-cyan/30 hover:text-realm-cyan"
+              >
+                Refresh
+              </button>
+            </div>
+
+            <div className="mt-8 rounded-3xl border border-realm-cyan/15 bg-gradient-to-br from-realm-cyan/[0.12] via-realm-cyan/[0.05] to-transparent p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-realm-cyan/70">Top public id</p>
+                  <p className="mt-3 text-xl font-semibold text-white">{leader?.publicId || 'No live leader yet'}</p>
+                </div>
+                <div className="rounded-full border border-realm-cyan/20 bg-realm-black/20 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-realm-cyan">
+                  #{leader?.rank || 0}
+                </div>
+              </div>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Points held</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{Number(leader?.points || leader?.totalPoints || 0).toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Completed tasks</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{leader?.tasks ?? 0}</p>
+                </div>
+              </div>
+              <p className="mt-5 text-sm text-white/50">
+                {leader ? `${leader.isOnline ? 'Currently mining' : 'Currently idle'}, joined ${new Date(leader.joinedAt).toLocaleDateString()}.` : 'The lead slot fills as soon as the first node starts earning.'}
+              </p>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Average points</p>
+                <p className="mt-3 text-2xl font-semibold text-white">{averagePoints.toFixed(2)}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Completed tasks tracked</p>
+                <p className="mt-3 text-2xl font-semibold text-white">{totalTasksCompleted}</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="glass-panel overflow-hidden border-white/5">
-        {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-8 h-8 border-2 border-realm-cyan border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-3 text-center p-8">
-            <ShieldCheck size={36} className="text-red-400/50" />
-            <p className="text-sm text-red-400/80">{error}</p>
-            <button onClick={fetchLeaderboard} className="text-xs text-realm-cyan hover:underline">Try Again</button>
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-3 text-center p-8">
-            <Trophy size={36} className="text-white/20" />
-            <p className="text-sm text-white/40">No leaderboard data yet.</p>
-            <p className="text-xs text-white/25 font-mono">As users connect and mine, their scores will appear here in real time.</p>
-          </div>
-        ) : (
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-white/5 bg-white/2">
-                <th className="px-8 py-6 text-[10px] font-mono text-white/40 uppercase tracking-widest">Rank</th>
-                <th className="px-8 py-6 text-[10px] font-mono text-white/40 uppercase tracking-widest">Node Name</th>
-                <th className="px-8 py-6 text-[10px] font-mono text-white/40 uppercase tracking-widest">Points</th>
-                <th className="px-8 py-6 text-[10px] font-mono text-white/40 uppercase tracking-widest">Status</th>
-                <th className="px-8 py-6 text-[10px] font-mono text-white/40 uppercase tracking-widest text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((item: any, i: number) => (
-                <motion.tr 
-                  key={item.publicId || item.name || i}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="border-b border-white/5 hover:bg-white/2 transition-colors group"
+      {loading ? (
+        <div className="glass-panel flex h-64 items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-realm-cyan border-t-transparent" />
+        </div>
+      ) : error ? (
+        <div className="glass-panel flex flex-col items-center justify-center gap-4 p-12 text-center">
+          <ShieldCheck size={36} className="text-red-400/50" />
+          <p className="text-sm text-red-400/80">{error}</p>
+          <button onClick={fetchLeaderboard} className="text-xs text-realm-cyan hover:underline">Try Again</button>
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="glass-panel flex flex-col items-center justify-center gap-3 p-12 text-center">
+          <Trophy size={36} className="text-white/20" />
+          <p className="text-sm text-white/40">No leaderboard data yet.</p>
+          <p className="text-xs font-mono text-white/25">As users connect and mine, this board will populate automatically.</p>
+        </div>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+          <div className="glass-panel p-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-serif text-3xl">Top cluster</h3>
+                <p className="mt-2 text-sm text-white/40">The current front of the network, based on exact wallet points.</p>
+              </div>
+              <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+                {activeCount} live
+              </div>
+            </div>
+            <div className="mt-8 space-y-4">
+              {podium.map((entry, index) => (
+                <motion.div
+                  key={entry.publicId}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className={cn(
+                    'rounded-3xl border p-5',
+                    index === 0 ? 'border-realm-cyan/20 bg-realm-cyan/[0.08]' : 'border-white/8 bg-white/[0.02]'
+                  )}
                 >
-                  <td className="px-8 py-6 font-mono text-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className={cn(
+                        'flex h-12 w-12 items-center justify-center rounded-2xl border text-sm font-mono',
+                        index === 0 ? 'border-realm-cyan/30 bg-realm-cyan/10 text-realm-cyan' : 'border-white/10 bg-white/[0.03] text-white/60'
+                      )}>
+                        #{entry.rank}
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-white">{entry.name || entry.publicId}</p>
+                        <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">{entry.publicId}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Points</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{Number(entry.points || entry.totalPoints || 0).toFixed(2)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
                     <span className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center border",
-                      i === 0 ? "border-realm-cyan text-realm-cyan bg-realm-cyan/10" : "border-white/10 text-white/40"
+                      'rounded-full px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em]',
+                      entry.isOnline ? 'bg-realm-cyan/10 text-realm-cyan' : 'bg-white/5 text-white/45'
                     )}>
-                      {i + 1}
+                      {entry.isOnline ? 'Live now' : 'Idle'}
                     </span>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="space-y-1">
-                      <p className="font-medium">{item.name || item.publicId || 'Anonymous'}</p>
-                      <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/30">{item.publicId}</p>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 font-mono text-realm-cyan">{(item.points || item.totalPoints || 0).toFixed(2)}</td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-2">
-                      <div className={cn("w-1.5 h-1.5 rounded-full", item.status === 'Active' || item.isOnline ? "bg-realm-cyan shadow-[0_0_8px_#3DF2E0]" : "bg-white/20")} />
-                      <span className="text-xs text-white/60">{item.status || (item.isOnline ? 'Active' : 'Offline')}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <button
-                      onClick={() => handleCopyPublicId(item.publicId || item.username || '')}
-                      className="text-xs font-mono text-white/40 hover:text-realm-cyan transition-all flex items-center gap-1 ml-auto"
-                    >
-                      {copiedEntryId === (item.publicId || item.username) ? 'Copied' : 'Copy ID'} <ChevronRight size={14} />
-                    </button>
-                  </td>
-                </motion.tr>
+                    <span className="text-xs text-white/45">{entry.tasks} completed tasks</span>
+                    <span className="text-xs text-white/35">Joined {new Date(entry.joinedAt).toLocaleDateString()}</span>
+                  </div>
+                </motion.div>
               ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+            </div>
+          </div>
+
+          <div className="glass-panel overflow-hidden p-0">
+            <div className="border-b border-white/5 px-6 py-5 md:px-8">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-serif text-3xl">Ranked roster</h3>
+                  <p className="mt-2 text-sm text-white/40">Public ids only, with exact points, task counts, and current activity state.</p>
+                </div>
+                <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+                  {entries.length} shown
+                </div>
+              </div>
+            </div>
+
+            <div className="divide-y divide-white/5">
+              {entries.map((entry: any, index: number) => (
+                <motion.div
+                  key={entry.publicId || entry.name || index}
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.025 }}
+                  className="px-6 py-5 transition-colors hover:bg-white/[0.02] md:px-8"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className={cn(
+                        'flex h-10 w-10 items-center justify-center rounded-2xl border text-sm font-mono',
+                        index < 3 ? 'border-realm-cyan/25 bg-realm-cyan/10 text-realm-cyan' : 'border-white/10 bg-white/[0.03] text-white/55'
+                      )}>
+                        #{entry.rank}
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <p className="font-semibold text-white">{entry.name || entry.publicId}</p>
+                          <span className={cn(
+                            'rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em]',
+                            entry.isOnline ? 'bg-realm-cyan/10 text-realm-cyan' : 'bg-white/5 text-white/40'
+                          )}>
+                            {entry.isOnline ? 'Active' : 'Offline'}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/35">
+                          <span className="font-mono uppercase tracking-[0.18em] text-white/30">{entry.publicId}</span>
+                          <span>{entry.tasks} tasks synced</span>
+                          <span>Joined {new Date(entry.joinedAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 md:justify-end">
+                      <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3 text-right">
+                        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Points</p>
+                        <p className="mt-1 text-lg font-semibold text-white">{Number(entry.points || entry.totalPoints || 0).toFixed(2)}</p>
+                      </div>
+                      <button
+                        onClick={() => handleCopyPublicId(entry.publicId || entry.username || '')}
+                        className="rounded-xl border border-white/10 px-4 py-3 text-xs font-mono uppercase tracking-[0.18em] text-white/55 hover:border-realm-cyan/30 hover:text-realm-cyan"
+                      >
+                        {copiedEntryId === (entry.publicId || entry.username) ? 'Copied' : 'Copy id'}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2772,12 +2947,19 @@ const WalletPage = () => {
   const [message, setMessage] = useState('');
   const [history, setHistory] = useState<any[]>([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const normalizedRecipient = recipient.trim().replace(/^@+/, '');
 
   const initiateTransfer = () => {
-    if (!recipient || !transferAmount) {
-      setMessage('Please enter a recipient and amount.');
+    if (!normalizedRecipient || !transferAmount) {
+      setMessage('Please enter a username and amount.');
       return;
     }
+
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(normalizedRecipient)) {
+      setMessage('Recipient must be a valid username.');
+      return;
+    }
+
     setMessage('');
     setShowConfirmModal(true);
   };
@@ -2810,7 +2992,7 @@ const WalletPage = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          recipient,
+          recipient: normalizedRecipient,
           amount: parseFloat(transferAmount)
         }),
         credentials: 'include'
@@ -2934,10 +3116,14 @@ const WalletPage = () => {
                     type="text" 
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
-                    placeholder="Enter email or wallet address"
+                    placeholder="Enter username"
                     className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 text-sm text-white placeholder:text-white/20 focus:border-realm-cyan outline-none transition-all"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                   />
                 </div>
+                <p className="text-[11px] text-white/30 font-mono">Username only. Email and wallet lookups are disabled for transfers.</p>
               </div>
 
               <div className="space-y-3">
@@ -3002,7 +3188,7 @@ const WalletPage = () => {
               </div>
               <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
                 <span className="text-white/40">Recipient</span>
-                <span className="font-mono text-white/80 max-w-[200px] truncate">{recipient}</span>
+                <span className="font-mono text-white/80 max-w-[200px] truncate">@{normalizedRecipient}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-white/40">Network Fee</span>

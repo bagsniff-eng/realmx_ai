@@ -33,15 +33,21 @@ router.get('/balance-public', async (req: any, res: any) => {
   res.json({ balance: 0 });
 });
 
-// Transfer points — supports username, email, or wallet address
+const normalizeRecipientUsername = (value: string) => value.trim().replace(/^@+/, '').toLowerCase();
+
+// Transfer points — username only
 router.post('/transfer', isAuthenticated, async (req: any, res: any) => {
   try {
     const fromUserId = req.user.id;
     const { recipient, amount } = req.body;
-    // `recipient` can be a username, email, or wallet address
+    const normalizedRecipient = typeof recipient === 'string' ? normalizeRecipientUsername(recipient) : '';
 
-    if (!recipient || typeof recipient !== 'string') {
-      return res.status(400).json({ message: 'Recipient is required (username, email, or wallet address)' });
+    if (!normalizedRecipient) {
+      return res.status(400).json({ message: 'Recipient username is required' });
+    }
+
+    if (!/^[a-z0-9_]{3,20}$/.test(normalizedRecipient)) {
+      return res.status(400).json({ message: 'Recipient must be a valid username' });
     }
 
     if (!amount || amount <= 0) {
@@ -60,19 +66,18 @@ router.post('/transfer', isAuthenticated, async (req: any, res: any) => {
       return res.status(400).json({ message: 'Insufficient balance' });
     }
 
-    // Find recipient by username, email, or wallet address
+    // Find recipient by username, case-insensitive.
     const toUser = await prisma.user.findFirst({
       where: {
-        OR: [
-          { username: recipient },
-          { email: recipient },
-          { walletAddress: recipient }
-        ]
+        username: {
+          equals: normalizedRecipient,
+          mode: 'insensitive',
+        }
       }
     });
 
     if (!toUser) {
-      return res.status(404).json({ message: 'Recipient not found. Try their username, email, or wallet address.' });
+      return res.status(404).json({ message: 'Recipient username not found.' });
     }
 
     if (toUser.id === fromUserId) {
