@@ -3836,7 +3836,7 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
               Sign in before the node dashboard loads
             </h1>
             <p className="mt-4 text-sm leading-6 text-white/55 sm:text-base">
-              Launch takes you into the app, but access stays gated until your identity is verified with X, Google, or your wallet.
+              Launch takes you into the app, but access stays gated until your identity is verified with Google, X, or Discord.
             </p>
           </div>
 
@@ -3863,14 +3863,16 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
               <ArrowUpRight size={16} className="text-white/50" />
             </a>
 
-            <Suspense fallback={<div className="h-14 w-full animate-pulse rounded-2xl bg-white/[0.05]" />}>
-              <WalletConnectControl
-                className="w-full"
-                buttonClassName="w-full min-h-14 justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-white hover:border-white/20 hover:bg-white/[0.08]"
-                connectedButtonClassName="w-full min-h-14 justify-between rounded-2xl border border-realm-cyan/20 bg-realm-cyan/10 px-5 text-sm font-semibold text-realm-cyan"
-                disconnectedLabel="Continue with wallet"
-              />
-            </Suspense>
+            <a
+              href={`/api/auth/discord?returnTo=${returnTo}`}
+              className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-white transition-all hover:border-white/20 hover:bg-white/[0.08]"
+            >
+              <span className="flex items-center gap-3">
+                <ShieldCheck size={18} />
+                Continue with Discord
+              </span>
+              <ArrowUpRight size={16} className="text-white/50" />
+            </a>
           </div>
 
           <div className="mt-8 rounded-2xl border border-white/8 bg-black/20 p-4 text-sm text-white/45">
