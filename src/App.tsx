@@ -3826,63 +3826,47 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
         <div className="absolute inset-0 grid-distortion opacity-20" />
       </div>
 
-      <div className="relative flex min-h-screen items-center justify-center px-6 py-10">
-        <div className="w-full max-w-[560px] rounded-[32px] border border-white/10 bg-white/[0.03] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-10">
-          <div className="mx-auto max-w-[420px] text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-realm-cyan/20 bg-realm-cyan/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.22em] text-realm-cyan">
-              REALMxAI node access
+      <div className="relative flex min-h-screen items-center justify-center px-5 py-8">
+        <div className="group w-full max-w-[280px] rounded-[24px] border border-white/10 bg-white/[0.03] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="text-center">
+            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[9px] font-mono uppercase tracking-[0.22em] text-white/50">
+              REALMxAI
             </div>
-            <h1 className="mt-6 text-balance text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-              Sign in before the node dashboard loads
+            <h1 className="mt-3 text-[1.45rem] font-semibold tracking-tight text-white">
+              Sign in
             </h1>
-            <p className="mt-4 text-sm leading-6 text-white/55 sm:text-base">
-              Launch takes you into the app, but access stays gated until your identity is verified with Google, X, or Discord.
-            </p>
           </div>
 
-          <div className="mt-10 space-y-4">
+          <div className="mt-5">
             <a
               href={`/api/auth/google?returnTo=${returnTo}`}
-              className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-white/10 bg-white px-5 text-sm font-semibold text-realm-black transition-all hover:bg-realm-cyan"
+              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-realm-black transition-all hover:bg-realm-cyan"
             >
-              <span className="flex items-center gap-3">
-                <Mail size={18} />
-                Continue with Google
-              </span>
-              <ArrowUpRight size={16} />
-            </a>
-
-            <a
-              href={`/api/auth/twitter?returnTo=${returnTo}`}
-              className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-white transition-all hover:border-white/20 hover:bg-white/[0.08]"
-            >
-              <span className="flex items-center gap-3">
-                <Link2 size={18} />
-                Continue with X
-              </span>
-              <ArrowUpRight size={16} className="text-white/50" />
-            </a>
-
-            <a
-              href={`/api/auth/discord?returnTo=${returnTo}`}
-              className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-white transition-all hover:border-white/20 hover:bg-white/[0.08]"
-            >
-              <span className="flex items-center gap-3">
-                <ShieldCheck size={18} />
-                Continue with Discord
-              </span>
-              <ArrowUpRight size={16} className="text-white/50" />
+              <Mail size={16} />
+              Continue
             </a>
           </div>
 
-          <div className="mt-8 rounded-2xl border border-white/8 bg-black/20 p-4 text-sm text-white/45">
-            <p>Sessions stay active for at least 30 days unless you explicitly sign out.</p>
-            <p className="mt-2">Unauthenticated visitors stay on this screen, even if they open dashboard URLs directly.</p>
+          <div className="mt-2.5 flex items-center justify-center gap-2 opacity-100 transition-all duration-200 sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 sm:group-focus-within:translate-y-0 sm:group-focus-within:opacity-100">
+            <a
+              href={`/api/auth/twitter?returnTo=${returnTo}`}
+              aria-label="Continue with X"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+            >
+              <Link2 size={14} />
+            </a>
+            <a
+              href={`/api/auth/discord?returnTo=${returnTo}`}
+              aria-label="Continue with Discord"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+            >
+              <ShieldCheck size={14} />
+            </a>
           </div>
 
           {loading && (
-            <div className="mt-6 text-center text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">
-              Restoring session...
+            <div className="mt-3 text-center text-[9px] font-mono uppercase tracking-[0.18em] text-white/28">
+              Restoring session
             </div>
           )}
         </div>
