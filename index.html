@@ -7,9 +7,47 @@
     <link rel="icon" type="image/webp" href="/le6jxytl.webp" />
     <!-- Node.js global polyfills required by Web3 libraries (wagmi, viem, rainbowkit) -->
     <script>
+      // Must run BEFORE any module scripts to prevent silent crashes
       window.global = window;
-      window.process = window.process || { env: {}, browser: true };
-      window.Buffer = window.Buffer || { isBuffer: function() { return false; } };
+      window.process = window.process || { env: {}, browser: true, version: 'v18.0.0', versions: { node: '18.0.0' } };
+      if (!window.Buffer) {
+        var BufferShim = function(arg) {
+          if (arg instanceof Uint8Array) return arg;
+          if (typeof arg === 'number') return new Uint8Array(arg);
+          if (typeof arg === 'string') return new TextEncoder().encode(arg);
+          if (Array.isArray(arg)) return new Uint8Array(arg);
+          return new Uint8Array(0);
+        };
+        BufferShim.from = function(data, enc) {
+          if (data instanceof ArrayBuffer) return new Uint8Array(data);
+          if (data instanceof Uint8Array) return data;
+          if (typeof data === 'string') {
+            if (enc === 'hex') {
+              var bytes = []; for (var i = 0; i < data.length; i += 2) bytes.push(parseInt(data.substr(i, 2), 16));
+              return new Uint8Array(bytes);
+            }
+            if (enc === 'base64') {
+              try { var bin = atob(data); var arr = new Uint8Array(bin.length); for (var j = 0; j < bin.length; j++) arr[j] = bin.charCodeAt(j); return arr; } catch(e) { return new Uint8Array(0); }
+            }
+            return new TextEncoder().encode(data);
+          }
+          if (Array.isArray(data)) return new Uint8Array(data);
+          return new Uint8Array(0);
+        };
+        BufferShim.alloc = function(size) { return new Uint8Array(size); };
+        BufferShim.allocUnsafe = function(size) { return new Uint8Array(size); };
+        BufferShim.isBuffer = function(obj) { return obj instanceof Uint8Array; };
+        BufferShim.concat = function(list, len) {
+          var total = len || list.reduce(function(s, b) { return s + b.length; }, 0);
+          var result = new Uint8Array(total); var offset = 0;
+          list.forEach(function(b) { result.set(b, offset); offset += b.length; });
+          return result;
+        };
+        BufferShim.byteLength = function(str) { return new TextEncoder().encode(str).length; };
+        BufferShim.isEncoding = function() { return true; };
+        BufferShim.prototype = Uint8Array.prototype;
+        window.Buffer = BufferShim;
+      }
     </script>
   </head>
   <body>

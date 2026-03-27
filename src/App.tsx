@@ -24,11 +24,22 @@ import {
   ChevronRight,
   Power,
   ShieldCheck,
+  ShieldAlert,
   Zap,
   ArrowUpRight,
   Search,
   Menu,
-  X
+  X,
+  Eye,
+  EyeOff,
+  Globe,
+  Lock,
+  Mail,
+  TimerReset,
+  BadgeCheck,
+  Link2,
+  Siren,
+  Fingerprint
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -48,10 +59,186 @@ const ANALYTICS_DATA: any[] = [];
 
 const LEADERBOARD_DATA: any[] = [];
 
+const TASKS_FALLBACK = [
+  { id: 'connect_google', type: 'one-time', category: 'connect', title: 'Connect Google', description: 'Attach your Google account so your dashboard identity is recoverable across devices.', reward: 10, actionType: 'oauth', actionHref: '/api/auth/google', primaryAction: 'Connect Google', completed: false, eligible: false, blockedReason: 'Sign in to execute and claim tasks.' },
+  { id: 'connect_x', type: 'one-time', category: 'connect', title: 'Connect X', description: 'Link your X account so social tasks can be executed from your REALMxAI profile.', reward: 10, actionType: 'oauth', actionHref: '/api/auth/twitter', primaryAction: 'Connect X', completed: false, eligible: false, blockedReason: 'Sign in to execute and claim tasks.' },
+  { id: 'connect_discord', type: 'one-time', category: 'connect', title: 'Connect Discord', description: 'Attach Discord to unlock community participation tasks and identity sync.', reward: 10, actionType: 'oauth', actionHref: '/api/auth/discord', primaryAction: 'Connect Discord', completed: false, eligible: false, blockedReason: 'Sign in to execute and claim tasks.' },
+  { id: 'connect_wallet', type: 'one-time', category: 'connect', title: 'Connect Web3 Wallet', description: 'Link a wallet through SIWE authentication to secure ownership of your node.', reward: 15, actionType: 'wallet', primaryAction: 'Open Wallet Connect', completed: false, eligible: false, blockedReason: 'Sign in to execute and claim tasks.' },
+  { id: 'follow_x', type: 'one-time', category: 'community', title: 'Follow REALMxAI on X', description: 'Open the official X profile and follow the project for launch updates.', reward: 10, actionType: 'external', actionHref: 'https://twitter.com/realmxai', primaryAction: 'Open X', completed: false, eligible: false, blockedReason: 'Connect X first to unlock this social task.' },
+  { id: 'join_discord', type: 'one-time', category: 'community', title: 'Join Discord', description: 'Open the REALMxAI Discord invite and join the community server.', reward: 10, actionType: 'external', actionHref: 'https://discord.gg/realmxai', primaryAction: 'Join Discord', completed: false, eligible: false, blockedReason: 'Connect Discord first, then join the server.' },
+  { id: 'join_telegram', type: 'one-time', category: 'community', title: 'Join Telegram', description: 'Open the official Telegram channel and join the announcement feed.', reward: 10, actionType: 'external', actionHref: 'https://t.me/REALMxAI', primaryAction: 'Join Telegram', completed: false, eligible: true, blockedReason: null },
+  { id: 'retweet_launch', type: 'one-time', category: 'community', title: 'Retweet Launch Post', description: 'Open the official X profile and repost the launch thread from your connected account.', reward: 15, actionType: 'external', actionHref: 'https://twitter.com/realmxai', primaryAction: 'Open Launch Post', completed: false, eligible: false, blockedReason: 'Connect X first to unlock this social task.' },
+  { id: 'signup_reward', type: 'one-time', category: 'milestone', title: 'Node Registration', description: 'Claim your account setup reward after signing in to the dashboard.', reward: 25, actionType: 'claim', primaryAction: 'Claim Reward', completed: false, eligible: false, blockedReason: 'Sign in to execute and claim tasks.' },
+  { id: 'complete_profile', type: 'one-time', category: 'milestone', title: 'Complete Your Profile', description: 'Add a display name and profile image to make your node identity complete.', reward: 15, actionType: 'claim', primaryAction: 'Claim Reward', completed: false, eligible: false, blockedReason: 'Add both a display name and a profile photo to claim this task.' },
+  { id: 'first_referral', type: 'one-time', category: 'milestone', title: 'Refer Your First Friend', description: 'Share your referral link and onboard one new user to the network.', reward: 20, actionType: 'claim', primaryAction: 'Claim Reward', completed: false, eligible: false, blockedReason: 'Invite at least one user through your referral link.' },
+  { id: 'first_mine_session', type: 'one-time', category: 'milestone', title: 'First Mining Session', description: 'Complete your first mining session and sync the earned points.', reward: 30, actionType: 'claim', primaryAction: 'Claim Reward', completed: false, eligible: false, blockedReason: 'Finish a mining session first, then claim this milestone.' },
+  { id: 'daily_checkin', type: 'daily', category: 'daily', title: 'Daily Check-In', description: 'Open the dashboard once per day to collect your check-in reward.', reward: 2, actionType: 'claim', primaryAction: 'Check In', completed: false, eligible: false, blockedReason: 'Sign in to execute and claim tasks.' },
+  { id: 'daily_mine', type: 'daily', category: 'daily', title: 'Run a Mining Session', description: 'Start or continue mining today, then claim the daily mining bonus.', reward: 5, actionType: 'claim', primaryAction: 'Claim Daily Bonus', completed: false, eligible: false, blockedReason: 'Start mining today before claiming this daily reward.' },
+  { id: 'daily_share', type: 'daily', category: 'daily', title: 'Share on Social Media', description: 'Share your dashboard or referral link on social media today.', reward: 3, actionType: 'external', actionHref: 'https://twitter.com/intent/tweet?text=Running%20my%20REALMxAI%20node%20today.%20Join%20me.', primaryAction: 'Share Now', completed: false, eligible: true, blockedReason: null },
+] as const;
+
+const TASK_CATEGORY_ORDER = ['connect', 'milestone', 'community', 'daily'] as const;
+
+function getTaskPriority(task: any) {
+  if (task.completed) return 3;
+  if (task.eligible) return 0;
+  if (task.category === 'connect' || task.category === 'milestone') return 1;
+  return 2;
+}
+
+function sortTasksForDisplay(tasks: any[]) {
+  return [...tasks].sort((left, right) => {
+    const categoryDelta =
+      TASK_CATEGORY_ORDER.indexOf(left.category as (typeof TASK_CATEGORY_ORDER)[number]) -
+      TASK_CATEGORY_ORDER.indexOf(right.category as (typeof TASK_CATEGORY_ORDER)[number]);
+    if (categoryDelta !== 0) return categoryDelta;
+
+    const priorityDelta = getTaskPriority(left) - getTaskPriority(right);
+    if (priorityDelta !== 0) return priorityDelta;
+
+    return String(left.title || left.id).localeCompare(String(right.title || right.id));
+  });
+}
+
+const UI_REFRESH_INTERVAL = 60000;
+const APP_PREFERENCES_KEY = 'realmx_preferences_v2';
+const APP_PREFERENCES_EVENT = 'realmx-preferences-updated';
+
+type AppPreferences = {
+  workspace: {
+    refreshIntervalMs: number;
+    hidePointBalance: boolean;
+  };
+  notifications: {
+    rewardAlerts: boolean;
+    taskAlerts: boolean;
+    securityAlerts: boolean;
+  };
+  privacy: {
+    maskWalletAddress: boolean;
+    showReferralCode: boolean;
+    profileVisibility: 'private' | 'network' | 'public';
+  };
+};
+
+const DEFAULT_APP_PREFERENCES: AppPreferences = {
+  workspace: {
+    refreshIntervalMs: UI_REFRESH_INTERVAL,
+    hidePointBalance: false,
+  },
+  notifications: {
+    rewardAlerts: true,
+    taskAlerts: true,
+    securityAlerts: true,
+  },
+  privacy: {
+    maskWalletAddress: true,
+    showReferralCode: true,
+    profileVisibility: 'network',
+  },
+};
+
+function loadAppPreferences(): AppPreferences {
+  if (typeof window === 'undefined') return DEFAULT_APP_PREFERENCES;
+
+  try {
+    const raw = window.localStorage.getItem(APP_PREFERENCES_KEY);
+    if (!raw) return DEFAULT_APP_PREFERENCES;
+
+    const parsed = JSON.parse(raw);
+    return {
+      workspace: {
+        refreshIntervalMs: Number(parsed?.workspace?.refreshIntervalMs) || DEFAULT_APP_PREFERENCES.workspace.refreshIntervalMs,
+        hidePointBalance: Boolean(parsed?.workspace?.hidePointBalance),
+      },
+      notifications: {
+        rewardAlerts: parsed?.notifications?.rewardAlerts !== false,
+        taskAlerts: parsed?.notifications?.taskAlerts !== false,
+        securityAlerts: parsed?.notifications?.securityAlerts !== false,
+      },
+      privacy: {
+        maskWalletAddress: parsed?.privacy?.maskWalletAddress !== false,
+        showReferralCode: parsed?.privacy?.showReferralCode !== false,
+        profileVisibility: ['private', 'network', 'public'].includes(parsed?.privacy?.profileVisibility)
+          ? parsed.privacy.profileVisibility
+          : DEFAULT_APP_PREFERENCES.privacy.profileVisibility,
+      },
+    };
+  } catch (error) {
+    console.error('Failed to load app preferences', error);
+    return DEFAULT_APP_PREFERENCES;
+  }
+}
+
+function saveAppPreferences(preferences: AppPreferences) {
+  if (typeof window === 'undefined') return;
+
+  window.localStorage.setItem(APP_PREFERENCES_KEY, JSON.stringify(preferences));
+  window.dispatchEvent(new Event(APP_PREFERENCES_EVENT));
+}
+
+function useAppPreferences() {
+  const [preferences, setPreferences] = useState<AppPreferences>(() => loadAppPreferences());
+
+  useEffect(() => {
+    const syncPreferences = () => setPreferences(loadAppPreferences());
+    window.addEventListener(APP_PREFERENCES_EVENT, syncPreferences);
+    window.addEventListener('storage', syncPreferences);
+    return () => {
+      window.removeEventListener(APP_PREFERENCES_EVENT, syncPreferences);
+      window.removeEventListener('storage', syncPreferences);
+    };
+  }, []);
+
+  return preferences;
+}
+
+function formatRefreshInterval(intervalMs: number) {
+  const seconds = Math.round(intervalMs / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.round(seconds / 60)}m`;
+}
+
+function maskWalletAddress(address?: string, enabled = true) {
+  if (!address) return '';
+  if (!enabled) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function getProfileVisibilityLabel(visibility: AppPreferences['privacy']['profileVisibility']) {
+  if (visibility === 'private') return 'Private';
+  if (visibility === 'public') return 'Public';
+  return 'Trusted network';
+}
+
+function getConnectedIdentityCount(user: any) {
+  return [
+    user?.email || user?.walletAddress,
+    user?.githubId,
+    user?.discordId,
+    user?.twitterId,
+  ].filter(Boolean).length;
+}
+
+function getProfileChecks(user: any) {
+  return [
+    !!user?.name,
+    !!user?.username,
+    !!user?.avatarUrl,
+    !!(user?.email || user?.walletAddress),
+    getConnectedIdentityCount(user) >= 2,
+  ];
+}
+
 // ---- Shared Mining Session Logic ----
 const SESSION_DURATION = 6 * 3600; // 6 hours in seconds
 const MINING_RATE_PER_HOUR = 10;
 const MINING_RATE_PER_SEC = MINING_RATE_PER_HOUR / 3600;
+
+function buildReferralLink(code: string) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${origin}/?ref=${encodeURIComponent(code)}`;
+}
 
 function getMiningSession() {
   const raw = localStorage.getItem('realmx_mining_session');
@@ -170,6 +357,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [topBarPoints, setTopBarPoints] = useState(0);
   const [notifications, setNotifications] = useState<{id: string; text: string; time: string; read: boolean}[]>([]);
+  const preferences = useAppPreferences();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -178,16 +366,37 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
         if (res.ok) {
           const data = await res.json();
           setUser(data);
-          // Add welcome notification
           setNotifications(prev => {
-            if (prev.some(n => n.id === 'welcome')) return prev;
-            return [{ id: 'welcome', text: `Welcome back${data.name ? ', ' + data.name : ''}! Your node is operational.`, time: 'just now', read: false }, ...prev];
+            const next = [...prev];
+
+            if (!next.some(n => n.id === 'welcome')) {
+              next.unshift({
+                id: 'welcome',
+                text: `Welcome back${data.name ? ', ' + data.name : ''}. Identity sync is active.`,
+                time: 'just now',
+                read: false,
+              });
+            }
+
+            if (preferences.notifications.securityAlerts && !next.some(n => n.id === 'identity-health')) {
+              const linkedCount = getConnectedIdentityCount(data);
+              next.unshift({
+                id: 'identity-health',
+                text: linkedCount >= 2
+                  ? `Recovery posture is healthy with ${linkedCount} linked identities.`
+                  : 'Recovery posture is weak. Add another identity in Profile to reduce lockout risk.',
+                time: 'now',
+                read: false,
+              });
+            }
+
+            return next;
           });
         }
       } catch (err) { }
     };
     fetchUser();
-  }, []);
+  }, [preferences.notifications.securityAlerts]);
 
   // Fetch real wallet balance
   useEffect(() => {
@@ -201,12 +410,12 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
       } catch (e) { }
     };
     fetchBalance();
-    const t = setInterval(fetchBalance, 30000);
+    const t = setInterval(fetchBalance, preferences.workspace.refreshIntervalMs);
     // Listen for balance-updated events (e.g. after mining stop)
     const onBalanceUpdated = () => fetchBalance();
     window.addEventListener('balance-updated', onBalanceUpdated);
     return () => { clearInterval(t); window.removeEventListener('balance-updated', onBalanceUpdated); };
-  }, []);
+  }, [preferences.workspace.refreshIntervalMs]);
 
   const isIdentityConnected = !!(user?.email || user?.walletAddress);
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -223,7 +432,12 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-3 px-3 py-1.5 bg-realm-surface border border-realm-border rounded-md">
           <Wallet size={14} className="text-realm-text-secondary" />
-          <span className="text-xs font-mono font-medium text-realm-text-primary">Points: <span className="text-realm-cyan">{topBarPoints.toFixed(2)}</span> REALM-P</span>
+          <span className="text-xs font-mono font-medium text-realm-text-primary">
+            Points:{' '}
+            <span className="text-realm-cyan">
+              {preferences.workspace.hidePointBalance ? 'Hidden' : `${topBarPoints.toFixed(2)} REALM-P`}
+            </span>
+          </span>
         </div>
         
         <div className="relative">
@@ -358,7 +572,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
             document.getElementById('signup-modal')?.classList.add('hidden');
             const err = document.getElementById('ref-error');
             if (err) err.style.display = 'none';
-          }} className="absolute top-4 right-4 text-realm-text-secondary hover:text-white">âœ•</button>
+          }} className="absolute top-4 right-4 text-realm-text-secondary hover:text-white">x</button>
           <h2 className="text-lg font-bold text-white">Create account</h2>
           <div className="flex flex-col gap-2">
             <label className="text-xs text-realm-text-secondary">Referral code (Optional)</label>
@@ -382,7 +596,8 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
                         const res = await fetch('/api/referral', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ code: val.trim(), userId: user.id })
+                            body: JSON.stringify({ code: val.trim(), userId: user.id }),
+                            credentials: 'include'
                         });
                         const data = await res.json();
                         if (!res.ok) {
@@ -415,6 +630,8 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
   const [points, setPoints] = useState(0);
   const [timeframe, setTimeframe] = useState('24H');
   const [chartData, setChartData] = useState<{t: string; v: number}[]>([]);
+  const [user, setUser] = useState<any | null>(null);
+  const [tasks, setTasks] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchPoints = async () => {
@@ -432,10 +649,38 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
         if (res.ok) setNetworkStats(await res.json());
       } catch (e) {}
     };
+    const fetchUser = async () => {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (res.ok) setUser(await res.json());
+        else setUser(null);
+      } catch (e) {
+        setUser(null);
+      }
+    };
+    const fetchTasks = async () => {
+      try {
+        const res = await fetch('/api/tasks', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setTasks(Array.isArray(data) && data.length > 0 ? data : [...TASKS_FALLBACK]);
+        } else {
+          setTasks([...TASKS_FALLBACK]);
+        }
+      } catch (e) {
+        setTasks([...TASKS_FALLBACK]);
+      }
+    };
     fetchPoints();
     fetchStats();
-    const t = setInterval(fetchStats, 30000);
-    return () => clearInterval(t);
+    fetchUser();
+    fetchTasks();
+    const t = setInterval(fetchStats, UI_REFRESH_INTERVAL);
+    window.addEventListener('balance-updated', fetchPoints);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('balance-updated', fetchPoints);
+    };
   }, []);
 
   // Fetch chart data based on timeframe
@@ -465,6 +710,79 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
 
   // Real-time pending rewards calculation (for display only)
   const pendingRewards = sessionSecs * MINING_RATE_PER_SEC;
+  const remainingSecs = Math.max(0, SESSION_DURATION - sessionSecs);
+  const sessionCompletion = Math.min(100, Math.round((sessionSecs / SESSION_DURATION) * 100));
+  const connectedAccounts = getConnectedIdentityCount(user);
+  const profileChecks = getProfileChecks(user);
+  const completedProfileChecks = profileChecks.filter(Boolean).length;
+  const profileCheckTotal = profileChecks.length;
+  const completedTasks = tasks.filter((task) => task.completed).length;
+  const readyTasks = tasks.filter((task) => !task.completed && task.eligible);
+  const blockedTasks = tasks.filter((task) => !task.completed && !task.eligible);
+  const projectedDaily = MINING_RATE_PER_HOUR * 24;
+  const projectedWeekly = projectedDaily * 7;
+  const nextSessionPayout = remainingSecs * MINING_RATE_PER_SEC;
+  const claimableSoon = readyTasks.slice(0, 3);
+  const activityFeed = [
+    miningActive
+      ? {
+          title: 'Mining session live',
+          detail: `${fTime(sessionSecs)} elapsed with ${pendingRewards.toFixed(2)} REALM pending.`,
+          tone: 'cyan',
+        }
+      : {
+          title: 'Node idle',
+          detail: 'Restart a 6h session to resume network contribution and rewards.',
+          tone: 'muted',
+        },
+    {
+      title: completedProfileChecks === profileCheckTotal ? 'Identity checks complete' : 'Identity setup still missing items',
+      detail: `${completedProfileChecks}/${profileCheckTotal} profile checks are complete across handle, avatar, primary identity, and recovery.`,
+      tone: completedProfileChecks === profileCheckTotal ? 'cyan' : 'amber',
+    },
+    {
+      title: `${connectedAccounts}/4 connected identities`,
+      detail: connectedAccounts >= 2 ? 'Sybil resistance is improving and account recovery is safer.' : 'Connect more providers to improve trust and recovery.',
+      tone: connectedAccounts >= 2 ? 'cyan' : 'amber',
+    },
+    {
+      title: `${readyTasks.length} task${readyTasks.length === 1 ? '' : 's'} ready`,
+      detail: readyTasks.length > 0 ? `Fastest unlock: ${readyTasks[0].title}.` : 'No instant claims available right now.',
+      tone: readyTasks.length > 0 ? 'cyan' : 'muted',
+    },
+  ];
+  const nodeHealthRows = [
+    {
+      label: 'Session uptime',
+      value: miningActive ? `${sessionCompletion}%` : 'Standby',
+      status: miningActive ? 'Healthy' : 'Idle',
+    },
+    {
+      label: 'Identity assurance',
+      value: `${completedProfileChecks}/${profileCheckTotal}`,
+      status: completedProfileChecks >= 4 ? 'Ready' : completedProfileChecks >= 2 ? 'In progress' : 'Needs work',
+    },
+    {
+      label: 'Trust links',
+      value: `${connectedAccounts}/4`,
+      status: connectedAccounts >= 3 ? 'Verified' : connectedAccounts >= 2 ? 'Partial' : 'Low',
+    },
+    {
+      label: 'Reward readiness',
+      value: `${readyTasks.length} open`,
+      status: readyTasks.length > 0 ? 'Actionable' : 'Waiting',
+    },
+  ];
+  const operatorLabel =
+    user?.username
+      ? `@${user.username}`
+      : user?.name
+        ? user.name
+        : user?.email
+          ? user.email.split('@')[0]
+          : user?.walletAddress
+            ? `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`
+            : 'Guest node';
 
   return (
     <div className="space-y-12">
@@ -482,9 +800,9 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-realm-cyan status-pulse" />
-              <span className="text-[10px] font-mono text-realm-text-secondary uppercase tracking-widest">NODE 0x82f...e10 — ACTIVE</span>
+              <span className="text-[10px] font-mono text-realm-text-secondary uppercase tracking-widest">{operatorLabel} | {miningActive ? 'ACTIVE' : 'STANDBY'}</span>
             </div>
-            <span className="text-[10px] font-mono text-white/20 uppercase tracking-widest">SYNC 99.9%</span>
+            <span className="text-[10px] font-mono text-white/20 uppercase tracking-widest">{connectedAccounts}/4 IDENTITIES LINKED</span>
           </div>
         </motion.div>
       </section>
@@ -597,6 +915,82 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           </div>
         </motion.div>
 
+        <div className="col-span-12 lg:col-span-7 glass-panel p-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Operator Snapshot</p>
+              <h3 className="mt-3 text-2xl font-semibold text-white">Exact account state</h3>
+              <p className="mt-2 max-w-xl text-sm text-white/40">
+                This panel uses exact counts and current state only: session progress, identity coverage, and actionable rewards.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-realm-cyan/20 bg-realm-cyan/10 px-4 py-3 text-right">
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-realm-cyan/70">Open tasks</p>
+              <p className="mt-2 text-3xl font-semibold text-realm-cyan">{readyTasks.length}</p>
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+            {nodeHealthRows.map((row) => (
+              <div key={row.label} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">{row.label}</p>
+                  <span
+                    className={cn(
+                      'rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em]',
+                      row.status === 'Healthy' || row.status === 'Strong' || row.status === 'Verified' || row.status === 'Actionable'
+                        ? 'bg-realm-cyan/10 text-realm-cyan'
+                        : row.status === 'Improving' || row.status === 'Partial'
+                          ? 'bg-amber-500/10 text-amber-300'
+                          : 'bg-white/5 text-white/45'
+                    )}
+                  >
+                    {row.status}
+                  </span>
+                </div>
+                <p className="mt-3 text-lg font-semibold text-white">{row.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="col-span-12 lg:col-span-5 glass-panel p-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Reward Forecast</p>
+              <h3 className="mt-3 text-2xl font-semibold text-white">What this node is on track to earn</h3>
+            </div>
+            <Zap size={18} className="text-realm-cyan" />
+          </div>
+
+          <div className="mt-8 space-y-4">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+              <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Current 6h session</p>
+              <p className="mt-3 text-3xl font-luciana text-white">{miningActive ? pendingRewards.toFixed(2) : '0.00'}</p>
+              <p className="mt-2 text-xs text-white/40">
+                {miningActive ? `${nextSessionPayout.toFixed(2)} REALM left before full session completion.` : 'No active payout window. Start a new session to resume accrual.'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Projected daily</p>
+                <p className="mt-3 text-2xl font-luciana text-realm-cyan">{projectedDaily}</p>
+                <p className="mt-1 text-xs text-white/35">REALM at full activity</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Projected weekly</p>
+                <p className="mt-3 text-2xl font-luciana text-white">{projectedWeekly}</p>
+                <p className="mt-1 text-xs text-white/35">REALM at steady uptime</p>
+              </div>
+            </div>
+
+            <button onClick={() => onNavigate('mining')} className="w-full rounded-xl border border-realm-cyan/20 bg-realm-cyan/10 px-4 py-3 text-left text-sm text-realm-cyan hover:border-realm-cyan/35">
+              Open mining controls
+            </button>
+          </div>
+        </div>
+
         {/* Analytics Section */}
         <div className="col-span-12 glass-panel p-8">
            <div className="flex justify-between items-end mb-8">
@@ -644,6 +1038,90 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
                   <p className="text-sm font-bold text-white/80">{s.value}</p>
                 </div>
               ))}        </div>
+        </div>
+
+        <div className="col-span-12 lg:col-span-7 glass-panel p-8">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Recent Activity</p>
+              <h3 className="mt-3 text-2xl font-semibold text-white">Why the node feels alive</h3>
+            </div>
+            <Activity size={18} className="text-realm-cyan" />
+          </div>
+
+          <div className="mt-8 space-y-4">
+            {activityFeed.map((entry) => (
+              <div key={entry.title} className="flex items-start gap-4 rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <div
+                  className={cn(
+                    'mt-1 h-2.5 w-2.5 rounded-full',
+                    entry.tone === 'cyan' ? 'bg-realm-cyan' : entry.tone === 'amber' ? 'bg-amber-300' : 'bg-white/20'
+                  )}
+                />
+                <div>
+                  <p className="text-sm font-semibold text-white">{entry.title}</p>
+                  <p className="mt-1 text-sm text-white/45">{entry.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="col-span-12 lg:col-span-5 glass-panel p-8">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Next Actions</p>
+              <h3 className="mt-3 text-2xl font-semibold text-white">Fastest path to a stronger node</h3>
+            </div>
+            <Bell size={18} className="text-realm-cyan" />
+          </div>
+
+          <div className="mt-8 space-y-3">
+            {claimableSoon.length > 0 ? claimableSoon.map((task) => (
+              <button
+                key={task.id}
+                onClick={() => {
+                  if (task.category === 'connect' || task.id === 'complete_profile' || task.id === 'connect_wallet') onNavigate('profile');
+                  else if (task.id === 'first_referral') onNavigate('referrals');
+                  else if (task.id === 'first_mine_session' || task.id === 'daily_mine') onNavigate('mining');
+                  else onNavigate('tasks');
+                }}
+                className="w-full rounded-2xl border border-white/8 bg-white/[0.02] p-4 text-left hover:border-realm-cyan/25"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{task.title}</p>
+                    <p className="mt-1 text-xs text-white/40">+{task.reward} REALM • {task.category}</p>
+                  </div>
+                  <ChevronRight size={16} className="mt-0.5 text-white/30" />
+                </div>
+              </button>
+            )) : blockedTasks.slice(0, 3).map((task) => (
+              <button
+                key={task.id}
+                onClick={() => onNavigate('tasks')}
+                className="w-full rounded-2xl border border-white/8 bg-white/[0.02] p-4 text-left hover:border-white/15"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{task.title}</p>
+                    <p className="mt-1 text-xs text-white/40">{task.blockedReason || 'Needs another step before it can be claimed.'}</p>
+                  </div>
+                  <ChevronRight size={16} className="mt-0.5 text-white/30" />
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Identity setup</p>
+            <p className="mt-3 text-sm text-white/75">
+              {completedProfileChecks}/{profileCheckTotal} checks complete. Finish the remaining identity items to improve recovery and task readiness.
+            </p>
+            <button onClick={() => onNavigate('profile')} className="mt-4 w-full rounded-xl border border-white/10 px-4 py-3 text-sm text-white/70 hover:border-white/20 hover:text-white">
+              Open profile
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -836,12 +1314,374 @@ const TasksPage = () => {
   );
 };
 
+const TasksPageV2 = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [user, setUser] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const fetchTasks = async () => {
+    try {
+      const [taskRes, userRes] = await Promise.all([
+        fetch('/api/tasks', { credentials: 'include' }),
+        fetch('/api/auth/me', { credentials: 'include' }),
+      ]);
+
+      if (taskRes.ok) {
+        const data = await taskRes.json();
+        const nextTasks = Array.isArray(data) && data.length > 0 ? data : [...TASKS_FALLBACK];
+        setTasks(sortTasksForDisplay(nextTasks));
+      } else {
+        setTasks(sortTasksForDisplay([...TASKS_FALLBACK]));
+      }
+
+      if (userRes.ok) {
+        setUser(await userRes.json());
+      } else {
+        setUser(null);
+      }
+    } catch (e) {
+      setTasks(sortTasksForDisplay([...TASKS_FALLBACK]));
+      setFeedback({ type: 'error', text: 'Task API failed, so fallback tasks are being shown.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  const completeTask = async (task: any) => {
+    const res = await fetch('/api/tasks/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: task.id }),
+      credentials: 'include',
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.message || data.error || 'Unable to complete task');
+    }
+
+    window.dispatchEvent(new Event('balance-updated'));
+    const referralBonus = data.referralBonus ? ` and +${Number(data.referralBonus).toFixed(2)} referral bonus` : '';
+    setFeedback({ type: 'success', text: `${task.title} completed. +${Number(data.reward || task.reward).toFixed(2)} REALM credited${referralBonus}.` });
+    await fetchTasks();
+  };
+
+  const handleTask = async (task: any) => {
+    if (task.completed || processingTaskId) return;
+
+    setFeedback(null);
+    setProcessingTaskId(task.id);
+
+    try {
+      if (task.actionType === 'oauth' && task.actionHref) {
+        const returnTo = encodeURIComponent('/?tab=tasks');
+        window.location.href = `${task.actionHref}?returnTo=${returnTo}`;
+        return;
+      }
+
+      if (task.actionType === 'wallet') {
+        onNavigate('profile');
+        setFeedback({ type: 'error', text: 'Open the profile menu and connect your wallet from the identity panel.' });
+        return;
+      }
+
+      if (!task.eligible && task.blockedReason) {
+        throw new Error(task.blockedReason);
+      }
+
+      if (task.actionHref) {
+        window.open(task.actionHref, '_blank', 'noopener,noreferrer');
+      }
+
+      await completeTask(task);
+    } catch (error: any) {
+      setFeedback({ type: 'error', text: error.message || 'Task execution failed.' });
+    } finally {
+      setProcessingTaskId(null);
+    }
+  };
+
+  const openRequirement = (task: any) => {
+    if (task.id === 'complete_profile' || task.id === 'connect_wallet') return onNavigate('profile');
+    if (task.id === 'first_referral') return onNavigate('referrals');
+    if (task.id === 'first_mine_session' || task.id === 'daily_mine') return onNavigate('mining');
+  };
+
+  const completed = tasks.filter((task) => task.completed).length;
+  const totalReward = tasks.filter((task) => task.completed).reduce((sum, task) => sum + task.reward, 0);
+  const readyToClaim = tasks.filter((task) => !task.completed && task.eligible).length;
+  const visibleTasks = sortTasksForDisplay(tasks.filter((task) => activeFilter === 'all' || task.category === activeFilter));
+  const filters = [
+    { id: 'all', label: 'All' },
+    { id: 'connect', label: 'Connect' },
+    { id: 'community', label: 'Community' },
+    { id: 'daily', label: 'Daily' },
+    { id: 'milestone', label: 'Milestones' },
+  ];
+  const groupedTasks = visibleTasks.reduce((groups: Record<string, any[]>, task: any) => {
+    const key = task.category || 'other';
+    groups[key] = groups[key] || [];
+    groups[key].push(task);
+    return groups;
+  }, {});
+  const visibleGroups = activeFilter === 'all'
+    ? TASK_CATEGORY_ORDER.filter((category) => groupedTasks[category]?.length)
+    : [activeFilter].filter((category) => groupedTasks[category]?.length);
+  const categoryLabels: Record<string, string> = {
+    connect: 'Connect',
+    milestone: 'Milestones',
+    community: 'Community',
+    daily: 'Daily',
+  };
+
+  return (
+    <div className="space-y-8 lg:space-y-10">
+      <section className="space-y-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-3">
+            <h1 className="text-serif text-4xl font-medium sm:text-5xl lg:text-6xl">
+              Tasks <span className="text-realm-cyan">Control Room</span>
+            </h1>
+            <p className="max-w-2xl text-sm text-white/50 sm:text-base">
+              Connect accounts, execute community actions, and claim rewards only when the requirement is actually satisfied.
+            </p>
+          </div>
+
+          <div className="glass-panel px-4 py-3 sm:px-5 sm:py-4">
+            <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Session</p>
+            <p className="mt-2 text-sm text-white/75">
+              {user ? `Signed in as ${user.name || user.username || user.email || 'active node'}` : 'Not signed in'}
+            </p>
+          </div>
+        </div>
+
+        {feedback && (
+          <div
+            className={cn(
+              'glass-panel px-4 py-3 text-sm',
+              feedback.type === 'success' ? 'border-realm-cyan/30 text-realm-cyan' : 'border-red-400/25 text-red-300',
+            )}
+          >
+            {feedback.text}
+          </div>
+        )}
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Ready To Claim', value: loading ? '...' : `${readyToClaim}`, icon: Zap },
+          { label: 'Completed', value: loading ? '...' : `${completed}`, icon: CheckSquare },
+          { label: 'Rewards Earned', value: loading ? '...' : `${totalReward}`, unit: 'REALM', icon: Trophy, special: true },
+          { label: 'Identity Links', value: loading ? '...' : `${tasks.filter((task) => task.category === 'connect' && task.completed).length}/4`, icon: ShieldCheck },
+        ].map((card) => (
+          <div key={card.label} className="glass-panel p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] text-white/35 font-mono uppercase tracking-[0.25em]">{card.label}</p>
+                <p className={cn('mt-3 text-3xl font-medium', card.special ? 'font-luciana text-realm-cyan' : 'text-white')}>
+                  {card.value}
+                  {card.unit && <span className="ml-2 text-xs text-white/35">{card.unit}</span>}
+                </p>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-white/5 text-white/55">
+                <card.icon size={18} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          <div className="flex flex-wrap gap-2">
+            {filters.map((filter) => (
+              <button
+                key={filter.id}
+                onClick={() => setActiveFilter(filter.id)}
+                className={cn(
+                  'rounded-full border px-4 py-2 text-xs font-mono uppercase tracking-[0.2em] transition-colors',
+                  activeFilter === filter.id
+                    ? 'border-realm-cyan/30 bg-realm-cyan/10 text-realm-cyan'
+                    : 'border-white/8 bg-white/[0.02] text-white/45 hover:border-white/15 hover:text-white/75',
+                )}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="glass-panel flex h-56 items-center justify-center">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-realm-cyan border-t-transparent" />
+            </div>
+          ) : visibleTasks.length === 0 ? (
+            <div className="glass-panel p-10 text-center">
+              <Activity size={42} className="mx-auto text-white/15" />
+              <p className="mt-4 text-sm text-white/45">No tasks match this filter.</p>
+            </div>
+          ) : (
+            visibleGroups.map((groupKey) => (
+              <div key={groupKey} className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-mono uppercase tracking-[0.3em] text-white/40">
+                    {categoryLabels[groupKey] || groupKey}
+                  </h3>
+                  <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/25">
+                    {groupedTasks[groupKey].length} task{groupedTasks[groupKey].length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                {groupedTasks[groupKey].map((task: any, index: number) => (
+                  <motion.div
+                    key={task.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.04 }}
+                    className={cn(
+                      'glass-panel p-5 sm:p-6',
+                      task.completed ? 'border-realm-cyan/15 bg-realm-cyan/[0.03]' : 'hover:border-white/12',
+                    )}
+                  >
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-[10px] font-mono uppercase tracking-[0.25em] text-white/40">
+                              {task.category}
+                            </span>
+                            <span
+                              className={cn(
+                                'rounded-full border px-3 py-1 text-[10px] font-mono uppercase tracking-[0.25em]',
+                                task.completed
+                                  ? 'border-realm-cyan/20 bg-realm-cyan/10 text-realm-cyan'
+                                  : task.eligible
+                                    ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+                                    : 'border-white/8 bg-white/[0.03] text-white/45',
+                              )}
+                            >
+                              {task.completed ? 'Completed' : task.eligible ? 'Ready' : 'Blocked'}
+                            </span>
+                            <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/30">
+                              {task.type === 'daily' ? 'Daily' : 'One-time'}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h3 className="text-xl font-semibold tracking-tight text-white">{task.title}</h3>
+                            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">{task.description}</p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-realm-cyan/15 bg-realm-cyan/[0.04] px-4 py-3 text-left lg:text-right">
+                          <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Reward</p>
+                          <p className="mt-2 font-luciana text-2xl text-realm-cyan">+{task.reward}</p>
+                        </div>
+                      </div>
+
+                      {!task.completed && task.blockedReason && (
+                        <div className="rounded-2xl border border-amber-300/10 bg-amber-300/[0.05] px-4 py-3 text-sm text-amber-100/80">
+                          {task.blockedReason}
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                        <div className="text-xs font-mono uppercase tracking-[0.2em] text-white/30">
+                          {task.completed ? 'Reward synchronized' : task.eligible ? 'Execution available now' : 'Resolve prerequisite first'}
+                        </div>
+
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          {!task.completed && !task.eligible && ['complete_profile', 'connect_wallet', 'first_referral', 'first_mine_session', 'daily_mine'].includes(task.id) && (
+                            <button
+                              onClick={() => openRequirement(task)}
+                              className="rounded-xl border border-white/10 px-4 py-3 text-xs font-bold text-white/70 transition-colors hover:border-white/20 hover:text-white"
+                            >
+                              Open Requirement
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleTask(task)}
+                            disabled={task.completed || processingTaskId === task.id}
+                            className={cn(
+                              'rounded-xl px-5 py-3 text-xs font-bold transition-all',
+                              task.completed
+                                ? 'cursor-default border border-realm-cyan/20 bg-realm-cyan/5 text-realm-cyan'
+                                : 'bg-white text-realm-black hover:bg-realm-cyan disabled:opacity-70',
+                            )}
+                          >
+                            {task.completed
+                              ? 'Completed'
+                              : processingTaskId === task.id
+                                ? 'Working...'
+                                : task.primaryAction || 'Execute'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="space-y-5">
+          <div className="glass-panel p-6 sm:p-8">
+            <h3 className="font-munich text-3xl text-white">mission status</h3>
+            <div className="mt-8 flex items-center justify-center">
+              <div className="relative flex h-40 w-40 items-center justify-center rounded-full border border-white/8">
+                <div className="absolute inset-3 rounded-full border border-realm-cyan/20" />
+                <div className="text-center">
+                  <p className="font-luciana text-4xl text-white">{tasks.length ? Math.round((completed / tasks.length) * 100) : 0}%</p>
+                  <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Completion</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-4 border-t border-white/6 pt-6">
+              <div className="flex items-center justify-between text-xs font-mono uppercase tracking-[0.2em] text-white/40">
+                <span>Claimable now</span>
+                <span className="text-realm-cyan">{readyToClaim}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono uppercase tracking-[0.2em] text-white/40">
+                <span>Community tasks</span>
+                <span>{tasks.filter((task) => task.category === 'community').length}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono uppercase tracking-[0.2em] text-white/40">
+                <span>Daily tasks</span>
+                <span>{tasks.filter((task) => task.category === 'daily').length}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-panel border-realm-cyan/20 bg-gradient-to-br from-realm-cyan/[0.09] to-transparent p-6 sm:p-8">
+            <Zap size={18} className="text-realm-cyan" />
+            <h4 className="mt-4 text-lg font-semibold text-white">How execution works now</h4>
+            <p className="mt-3 text-sm leading-6 text-white/55">
+              Connect tasks launch the correct OAuth flow, community tasks open the external destination and then claim, and blocked tasks now explain exactly what is missing.
+            </p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+};
+
 const ReferralsPage = () => {
   const [copied, setCopied] = useState(false);
   const [referrals, setReferrals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [referralCode, setReferralCode] = useState('REALM-ALPHA-??');
   const [showAllReferrals, setShowAllReferrals] = useState(false);
+  const referralLink = buildReferralLink(referralCode);
 
   const handleCopy = async (text: string) => {
     try {
@@ -896,15 +1736,9 @@ const ReferralsPage = () => {
           <h3 className="text-serif text-2xl mb-8">Your Referral Link</h3>
           <div className="space-y-6">
             <div className="p-4 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
-              <code className="text-sm font-mono text-white/60">realm.ai/join/{referralCode}</code>
-              <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(`realm.ai/join/${referralCode}`);
-                  setCopied(true); setTimeout(() => setCopied(false), 2000);
-                }}
-                className="text-xs font-mono text-realm-cyan hover:underline"
-              >
-                {copied ? 'âœ“ Copied!' : 'Copy Link'}
+              <code className="text-sm font-mono text-white/60">{referralLink}</code>
+              <button onClick={() => handleCopy(referralLink)} className="text-xs font-mono text-realm-cyan hover:underline">
+                {copied ? 'Copied!' : 'Copy Link'}
               </button>
             </div>
             <div className="p-4 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between">
@@ -916,7 +1750,7 @@ const ReferralsPage = () => {
                 onClick={() => handleCopy(referralCode)}
                 className="px-6 py-2 bg-white text-realm-black rounded-lg text-xs font-bold hover:bg-realm-cyan transition-all"
               >
-                {copied ? '✓ Copied' : 'Share Code'}
+                {copied ? 'Copied' : 'Share Code'}
               </button>
             </div>
           </div>
@@ -924,7 +1758,7 @@ const ReferralsPage = () => {
           <div className="mt-8 p-6 bg-realm-cyan/5 border border-realm-cyan/10 rounded-2xl">
             <h4 className="font-medium mb-2">How it works</h4>
             <p className="text-sm text-white/50 leading-relaxed">
-              Earn 10% of all rewards generated by nodes you refer. Rewards are credited instantly to your balance as long as their node remains active.
+              Earn 10% of every REALM reward generated by nodes you refer. Referral rewards are credited automatically to your wallet balance.
             </p>
           </div>
         </div>
@@ -987,13 +1821,30 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
     try {
       const res = await fetch('/api/mining/history', { credentials: 'include' });
       if (res.ok) {
-        setHistory(await res.json());
+        const data = await res.json();
+        setHistory(data);
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+
+        const nextTodayPoints = data
+          .filter((entry: any) => new Date(entry.startedAt) >= today)
+          .reduce((sum: number, entry: any) => sum + Number(entry.pointsEarned || 0), 0);
+
+        const nextWeekPoints = data
+          .filter((entry: any) => new Date(entry.startedAt) >= weekStart)
+          .reduce((sum: number, entry: any) => sum + Number(entry.pointsEarned || 0), 0);
+
+        setTodayPoints(nextTodayPoints);
+        setWeekPoints(nextWeekPoints);
       }
     } catch(e) {}
   };
 
   useEffect(() => {
-    fetchHistory();
     const fetchBalance = async () => {
       try {
         const res = await fetch('/api/wallet/balance', { credentials: 'include' });
@@ -1003,7 +1854,14 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
         }
       } catch(e) {}
     };
+    fetchHistory();
     fetchBalance();
+    const refresh = () => {
+      fetchHistory();
+      fetchBalance();
+    };
+    window.addEventListener('balance-updated', refresh);
+    return () => window.removeEventListener('balance-updated', refresh);
   }, []);
 
   const fTime = (sec: number) => {
@@ -1014,21 +1872,12 @@ const MiningPage = ({ miningActive, sessionSecs, onToggleMining }: { miningActiv
   };
 
   useEffect(() => {
-    if (!miningActive) return;
-    const timer = setInterval(() => {
-      // Update rewards at real mining rate every minute
-      if (sessionSecs % 60 === 0 && sessionSecs > 0) {
-        const minuteEarned = parseFloat((MINING_RATE_PER_SEC * 60).toFixed(4));
-        setTodayPoints(p => parseFloat((p + minuteEarned).toFixed(4)));
-        setWeekPoints(p => parseFloat((p + minuteEarned).toFixed(4)));
-        setTotalPoints(p => parseFloat((p + minuteEarned).toFixed(4)));
-        setEvents(ev => [
-          { event: `Reward credited: +${minuteEarned.toFixed(4)} REALM`, time: `${Math.floor(sessionSecs/60)}m into session`, amount: `+${minuteEarned.toFixed(4)} REALM-P` },
-          ...ev.slice(0, 4)
-        ]);
-      }
-    }, 1000);
-    return () => clearInterval(timer);
+    if (!miningActive || sessionSecs === 0 || sessionSecs % 60 !== 0) return;
+    const minuteEarned = parseFloat((MINING_RATE_PER_SEC * 60).toFixed(4));
+    setEvents(ev => [
+      { event: `Reward buffered: +${minuteEarned.toFixed(4)} REALM`, time: `${Math.floor(sessionSecs / 60)}m into session`, amount: `+${minuteEarned.toFixed(4)} REALM-P` },
+      ...ev.slice(0, 4)
+    ]);
   }, [miningActive, sessionSecs]);
 
   const rate = MINING_RATE_PER_HOUR;
@@ -1382,6 +2231,7 @@ const Leaderboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
 
   const fetchLeaderboard = async () => {
     setLoading(true);
@@ -1403,9 +2253,19 @@ const Leaderboard = () => {
 
   useEffect(() => {
     fetchLeaderboard();
-    const timer = setInterval(fetchLeaderboard, 30000); // refresh every 30s
+    const timer = setInterval(fetchLeaderboard, UI_REFRESH_INTERVAL);
     return () => clearInterval(timer);
   }, []);
+
+  const handleCopyPublicId = async (publicId: string) => {
+    try {
+      await navigator.clipboard.writeText(publicId);
+      setCopiedEntryId(publicId);
+      setTimeout(() => setCopiedEntryId((current) => (current === publicId ? null : current)), 1500);
+    } catch (err) {
+      console.error('Failed to copy public ID', err);
+    }
+  };
 
   return (
     <div className="space-y-10">
@@ -1421,7 +2281,7 @@ const Leaderboard = () => {
               onClick={fetchLeaderboard}
               className="px-3 py-1.5 text-[10px] font-mono border border-realm-border rounded hover:border-realm-cyan hover:text-realm-cyan transition-colors"
             >
-              ↻ Refresh
+              Refresh
             </button>
           </div>
         </div>
@@ -1458,7 +2318,7 @@ const Leaderboard = () => {
             <tbody>
               {entries.map((item: any, i: number) => (
                 <motion.tr 
-                  key={item.name || item.address || i}
+                  key={item.publicId || item.name || i}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05 }}
@@ -1472,7 +2332,12 @@ const Leaderboard = () => {
                       {i + 1}
                     </span>
                   </td>
-                  <td className="px-8 py-6 font-medium">{item.name || item.address?.slice(0,10)+'...' || 'Anonymous'}</td>
+                  <td className="px-8 py-6">
+                    <div className="space-y-1">
+                      <p className="font-medium">{item.name || item.publicId || 'Anonymous'}</p>
+                      <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/30">{item.publicId}</p>
+                    </div>
+                  </td>
                   <td className="px-8 py-6 font-mono text-realm-cyan">{(item.points || item.totalPoints || 0).toFixed(2)}</td>
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-2">
@@ -1481,8 +2346,11 @@ const Leaderboard = () => {
                     </div>
                   </td>
                   <td className="px-8 py-6 text-right">
-                    <button className="text-xs font-mono text-white/40 hover:text-realm-cyan transition-colors flex items-center gap-1 ml-auto">
-                      View Profile <ChevronRight size={14} />
+                    <button
+                      onClick={() => handleCopyPublicId(item.publicId || item.username || '')}
+                      className="text-xs font-mono text-white/40 hover:text-realm-cyan transition-all flex items-center gap-1 ml-auto"
+                    >
+                      {copiedEntryId === (item.publicId || item.username) ? 'Copied' : 'Copy ID'} <ChevronRight size={14} />
                     </button>
                   </td>
                 </motion.tr>
@@ -1496,50 +2364,31 @@ const Leaderboard = () => {
 };
 
 const SettingsPage = () => {
-  const [settings, setSettings] = useState([
-    { 
-      category: 'Node Configuration', 
-      items: [
-        { label: 'Auto-start on boot', desc: 'Launch node automatically when system starts', active: true },
-        { label: 'Background execution', desc: 'Keep node running when dashboard is closed', active: true },
-        { label: 'Resource allocation', desc: 'Adjust dedicated CPU/Memory usage', isSlider: true, value: 50 },
-      ]
-    },
-    { 
-      category: 'Privacy & Security', 
-      items: [
-        { label: 'Encrypted logs', desc: 'All local logs are stored with AES-256 encryption', active: true },
-        { label: 'Stealth mode', desc: 'Hide node presence from local network discovery', active: false },
-        { label: 'Automatic updates', desc: 'Keep node software updated to latest version', active: true },
-      ]
-    },
-    { 
-      category: 'Notifications', 
-      items: [
-        { label: 'Payout alerts', desc: 'Notify when rewards are credited to balance', active: true },
-        { label: 'Network status', desc: 'Alert if node loses connection to peers', active: true },
-      ]
-    }
-  ]);
+  const [preferences, setPreferences] = useState<AppPreferences>(() => loadAppPreferences());
   const [toastMessage, setToastMessage] = useState('');
 
-  const handleToggle = (cIndex: number, iIndex: number) => {
-    const newSettings = [...settings];
-    if (newSettings[cIndex].items[iIndex].isSlider) return;
-    newSettings[cIndex].items[iIndex].active = !newSettings[cIndex].items[iIndex].active;
-    setSettings(newSettings);
-  };
-
-  const handleSlider = (cIndex: number, iIndex: number, val: number) => {
-    const newSettings = [...settings];
-    newSettings[cIndex].items[iIndex].value = val;
-    setSettings(newSettings);
+  const updatePreferences = (updater: (current: AppPreferences) => AppPreferences) => {
+    setPreferences((current) => updater(current));
   };
 
   const notify = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
   };
+
+  const trustNotes = [
+    preferences.notifications.securityAlerts
+      ? 'Security notifications stay on, so account state changes remain visible.'
+      : 'Security notifications are muted, so identity changes can be easier to miss.',
+    preferences.workspace.hidePointBalance
+      ? 'Balances are masked in the workspace to reduce shoulder-surfing risk.'
+      : 'Balances are visible in the workspace for faster operator scanning.',
+    preferences.privacy.profileVisibility === 'private'
+      ? 'Profile discovery is locked down to direct account access only.'
+      : preferences.privacy.profileVisibility === 'network'
+        ? 'Profile details are shared in a limited, network-facing way.'
+        : 'Profile is configured for public sharing, which is lower-trust by default.',
+  ];
 
   return (
     <div className="max-w-4xl mx-auto space-y-10 relative">
@@ -1554,58 +2403,278 @@ const SettingsPage = () => {
       )}
 
       <section>
-        <h1 className="text-serif text-6xl font-medium mb-4">System <span className="text-realm-cyan">Settings</span></h1>
-        <p className="text-white/50 font-mono text-sm tracking-wide">Configure your node environment and preferences.</p>
+        <div>
+          <h1 className="text-serif text-5xl font-medium mb-4">Account <span className="text-realm-cyan">Controls</span></h1>
+          <p className="max-w-2xl text-white/50 font-mono text-sm tracking-wide">
+            Minimal local controls for refresh behavior, notification signal, and identity disclosure in this browser.
+          </p>
+        </div>
       </section>
 
-      <div className="space-y-6">
-        {settings.map((group, cIndex) => (
-          <div key={group.category} className="glass-panel p-8">
-            <h3 className="text-serif text-2xl mb-6">{group.category}</h3>
-            <div className="space-y-6">
-              {group.items.map((item, iIndex) => (
-                <div key={item.label} className="flex justify-between items-center py-4 border-b border-white/5 last:border-0">
-                  <div className="space-y-1 flex-1 pr-6">
-                    <p className="font-medium">{item.label}</p>
-                    <p className="text-xs text-white/40 font-mono">{item.desc}</p>
-                  </div>
-                  
-                  {item.isSlider ? (
-                    <div className="w-48 flex flex-col gap-2">
-                       <input 
-                         type="range" 
-                         min="10" 
-                         max="100" 
-                         value={item.value || 50} 
-                         onChange={(e) => handleSlider(cIndex, iIndex, parseInt(e.target.value))}
-                         className="w-full accent-realm-cyan h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                       />
-                       <p className="text-xs font-mono text-realm-cyan text-right">{item.value}%</p>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => handleToggle(cIndex, iIndex)}
-                      className={cn(
-                        "w-12 h-6 rounded-full p-1 transition-colors duration-300 cursor-pointer",
-                        item.active ? "bg-realm-cyan" : "bg-white/10"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-4 h-4 bg-white rounded-full transition-transform duration-300",
-                        item.active ? "translate-x-6" : "translate-x-0"
-                      )} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          {
+            label: 'Refresh cadence',
+            value: formatRefreshInterval(preferences.workspace.refreshIntervalMs),
+            detail: 'Controls wallet and surface polling interval.',
+          },
+          {
+            label: 'Profile exposure',
+            value: getProfileVisibilityLabel(preferences.privacy.profileVisibility),
+            detail: 'Sets how aggressively the workspace reveals your identity.',
+          },
+          {
+            label: 'Balance visibility',
+            value: preferences.workspace.hidePointBalance ? 'Masked' : 'Visible',
+            detail: 'Applied to shared workspace surfaces such as the top bar.',
+          },
+        ].map((item) => (
+          <div key={item.label} className="glass-panel p-6">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">{item.label}</p>
+            <p className="mt-3 text-2xl font-semibold text-white">{item.value}</p>
+            <p className="mt-2 text-sm text-white/40">{item.detail}</p>
           </div>
         ))}
       </div>
+
+      <div className="glass-panel p-8 space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-serif text-3xl">Workspace behavior</h3>
+            <p className="mt-2 text-sm text-white/40">
+              Real controls for how aggressively the app refreshes and how much balance detail it exposes on screen.
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+            Browser local
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="flex flex-col gap-4 border-b border-white/5 pb-6 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <p className="font-medium text-white">Auto refresh cadence</p>
+              <p className="text-xs text-white/40 font-mono">This changes how often balance and network surfaces re-poll while the dashboard stays open.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[15000, 60000, 180000].map((value) => (
+                <button
+                  key={value}
+                  onClick={() => updatePreferences((current) => ({
+                    ...current,
+                    workspace: { ...current.workspace, refreshIntervalMs: value },
+                  }))}
+                  className={cn(
+                    'rounded-full border px-4 py-2 text-xs font-semibold transition-all',
+                    preferences.workspace.refreshIntervalMs === value
+                      ? 'border-realm-cyan bg-realm-cyan text-realm-black'
+                      : 'border-white/10 text-white/60 hover:border-white/25 hover:text-white'
+                  )}
+                >
+                  {value === 15000 ? 'Fast 15s' : value === 60000 ? 'Balanced 1m' : 'Light 3m'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1 pr-6">
+              <p className="font-medium text-white">Hide point balances on shared screens</p>
+              <p className="text-xs text-white/40 font-mono">Masks the top-bar point balance and any future operator summary surfaces in this browser.</p>
+            </div>
+            <button
+              onClick={() => updatePreferences((current) => ({
+                ...current,
+                workspace: { ...current.workspace, hidePointBalance: !current.workspace.hidePointBalance },
+              }))}
+              className={cn(
+                'w-12 h-6 rounded-full p-1 transition-colors duration-300',
+                preferences.workspace.hidePointBalance ? 'bg-realm-cyan' : 'bg-white/10'
+              )}
+            >
+              <div className={cn('w-4 h-4 bg-white rounded-full transition-transform duration-300', preferences.workspace.hidePointBalance ? 'translate-x-6' : 'translate-x-0')} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-panel p-8 space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-serif text-3xl">Notifications that matter</h3>
+            <p className="mt-2 text-sm text-white/40">
+              Keep the feed focused on account changes, claimable progress, and balance movement instead of decorative noise.
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+            Workspace feed
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          {[
+            {
+              key: 'rewardAlerts',
+              title: 'Reward and payout alerts',
+              description: 'Surface credited balances, mining sync events, and successful claims in the operator feed.',
+            },
+            {
+              key: 'taskAlerts',
+              title: 'Task unlock reminders',
+              description: 'Highlight when profile or social actions become eligible so the dashboard feels actionable.',
+            },
+            {
+              key: 'securityAlerts',
+              title: 'Identity and security notices',
+              description: 'Warn when recovery posture is weak or when too few providers are linked for safe access recovery.',
+            },
+          ].map((item) => (
+            <div key={item.key} className="flex items-center justify-between gap-4 border-b border-white/5 pb-5 last:border-0 last:pb-0">
+              <div className="space-y-1 pr-6">
+                <p className="font-medium text-white">{item.title}</p>
+                <p className="text-xs text-white/40 font-mono">{item.description}</p>
+              </div>
+              <button
+                onClick={() => updatePreferences((current) => ({
+                  ...current,
+                  notifications: {
+                    ...current.notifications,
+                    [item.key]: !current.notifications[item.key as keyof AppPreferences['notifications']],
+                  },
+                }))}
+                className={cn(
+                  'w-12 h-6 rounded-full p-1 transition-colors duration-300',
+                  preferences.notifications[item.key as keyof AppPreferences['notifications']] ? 'bg-realm-cyan' : 'bg-white/10'
+                )}
+              >
+                <div
+                  className={cn(
+                    'w-4 h-4 bg-white rounded-full transition-transform duration-300',
+                    preferences.notifications[item.key as keyof AppPreferences['notifications']] ? 'translate-x-6' : 'translate-x-0'
+                  )}
+                />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="glass-panel p-8 space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-serif text-3xl">Identity exposure</h3>
+            <p className="mt-2 text-sm text-white/40">
+              These controls influence what the profile screen reveals and how visible your recovery handles are during normal operation.
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+            Profile linked
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-white">Profile visibility</p>
+            <div className="grid gap-3 md:grid-cols-3">
+              {[
+                { value: 'private', title: 'Private', detail: 'Only expose core account data inside direct profile access.' },
+                { value: 'network', title: 'Trusted network', detail: 'Allow moderate workspace visibility without exposing everything.' },
+                { value: 'public', title: 'Public', detail: 'Make the profile presentation more promotional than protective.' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => updatePreferences((current) => ({
+                    ...current,
+                    privacy: { ...current.privacy, profileVisibility: option.value as AppPreferences['privacy']['profileVisibility'] },
+                  }))}
+                  className={cn(
+                    'rounded-2xl border p-4 text-left transition-all',
+                    preferences.privacy.profileVisibility === option.value
+                      ? 'border-realm-cyan bg-realm-cyan/10'
+                      : 'border-white/10 bg-white/[0.02] hover:border-white/25'
+                  )}
+                >
+                  <p className="font-semibold text-white">{option.title}</p>
+                  <p className="mt-2 text-xs text-white/45">{option.detail}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {[
+            {
+              key: 'maskWalletAddress',
+              title: 'Mask wallet address by default',
+              description: 'Shortens the wallet everywhere outside dedicated transfer flows so the profile reads like an identity layer, not a raw dump.',
+            },
+            {
+              key: 'showReferralCode',
+              title: 'Show referral code in profile',
+              description: 'Keeps the referral code visible on the profile surface when you actively use the dashboard for invites.',
+            },
+          ].map((item) => (
+            <div key={item.key} className="flex items-center justify-between gap-4 border-b border-white/5 pb-5 last:border-0 last:pb-0">
+              <div className="space-y-1 pr-6">
+                <p className="font-medium text-white">{item.title}</p>
+                <p className="text-xs text-white/40 font-mono">{item.description}</p>
+              </div>
+              <button
+                onClick={() => updatePreferences((current) => ({
+                  ...current,
+                  privacy: {
+                    ...current.privacy,
+                    [item.key]: !current.privacy[item.key as keyof AppPreferences['privacy']],
+                  },
+                }))}
+                className={cn(
+                  'w-12 h-6 rounded-full p-1 transition-colors duration-300',
+                  preferences.privacy[item.key as keyof Pick<AppPreferences['privacy'], 'maskWalletAddress' | 'showReferralCode'>] ? 'bg-realm-cyan' : 'bg-white/10'
+                )}
+              >
+                <div
+                  className={cn(
+                    'w-4 h-4 bg-white rounded-full transition-transform duration-300',
+                    preferences.privacy[item.key as keyof Pick<AppPreferences['privacy'], 'maskWalletAddress' | 'showReferralCode'>] ? 'translate-x-6' : 'translate-x-0'
+                  )}
+                />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="glass-panel p-8">
+        <h3 className="text-serif text-3xl">Notes</h3>
+        <div className="mt-5 space-y-3">
+          {trustNotes.map((note) => (
+            <div key={note} className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+              <ShieldCheck size={16} className="mt-0.5 text-realm-cyan" />
+              <p className="text-sm text-white/65">{note}</p>
+            </div>
+          ))}
+        </div>
+      </div>
       
       <div className="flex justify-end gap-4 pt-6">
-        <button onClick={() => notify('Changes discarded.')} className="px-8 py-3 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/5 transition-all">Discard Changes</button>
-        <button onClick={() => notify('Configuration saved successfully.')} className="px-8 py-3 bg-realm-cyan text-realm-black rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(61,242,224,0.3)] transition-all">Save Configuration</button>
+        <button
+          onClick={() => {
+            setPreferences(DEFAULT_APP_PREFERENCES);
+            saveAppPreferences(DEFAULT_APP_PREFERENCES);
+            notify('Preferences reset to trusted defaults.');
+          }}
+          className="px-8 py-3 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/5 transition-all"
+        >
+          Reset Defaults
+        </button>
+        <button
+          onClick={() => {
+            saveAppPreferences(preferences);
+            notify('Preferences saved and applied to the workspace.');
+          }}
+          className="px-8 py-3 bg-realm-cyan text-realm-black rounded-xl text-sm font-bold hover:shadow-[0_0_20px_rgba(61,242,224,0.3)] transition-all"
+        >
+          Save Preferences
+        </button>
       </div>
     </div>
   );
@@ -1645,6 +2714,8 @@ const WalletPage = () => {
 
   useEffect(() => {
     fetchData();
+    window.addEventListener('balance-updated', fetchData);
+    return () => window.removeEventListener('balance-updated', fetchData);
   }, []);
 
   const handleTransfer = async () => {
@@ -1655,8 +2726,7 @@ const WalletPage = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          toEmail: recipient.includes('@') ? recipient : undefined,
-          toWallet: !recipient.includes('@') ? recipient : undefined,
+          recipient,
           amount: parseFloat(transferAmount)
         }),
         credentials: 'include'
@@ -1667,6 +2737,8 @@ const WalletPage = () => {
         setBalance(data.newBalance);
         setTransferAmount('');
         setRecipient('');
+        window.dispatchEvent(new Event('balance-updated'));
+        fetchData();
       } else {
         setMessage(data.message || 'Transfer failed');
       }
@@ -1675,6 +2747,12 @@ const WalletPage = () => {
     }
     setTransferring(false);
   };
+
+  const successfulPayouts = history.filter((entry) => !entry.isActive && Number(entry.pointsEarned || 0) > 0);
+  const avgPayout = successfulPayouts.length
+    ? successfulPayouts.reduce((sum, entry) => sum + Number(entry.pointsEarned || 0), 0) / successfulPayouts.length
+    : 0;
+  const unsettledPayouts = Math.max(history.length - successfulPayouts.length, 0);
 
   return (
     <div className="space-y-12">
@@ -1706,6 +2784,31 @@ const WalletPage = () => {
               <div className="flex-1 text-right">
                 <p className="text-[9px] text-white/20 font-mono uppercase mb-1">Locked</p>
                 <p className="text-sm font-medium">0.00</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-panel p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] text-white/35 font-mono uppercase tracking-[0.22em]">Payout record</p>
+                <h4 className="mt-3 text-xl font-semibold text-white">Settled history</h4>
+              </div>
+              <ShieldCheck size={18} className="text-realm-cyan" />
+            </div>
+
+            <div className="mt-6 grid grid-cols-3 gap-4">
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Settled runs</p>
+                <p className="mt-3 text-xl font-luciana text-realm-cyan">{successfulPayouts.length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Avg payout</p>
+                <p className="mt-3 text-xl font-luciana text-white">{avgPayout.toFixed(2)}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Unsettled runs</p>
+                <p className="mt-3 text-xl font-luciana text-white">{unsettledPayouts}</p>
               </div>
             </div>
           </div>
@@ -1838,17 +2941,24 @@ const WalletPage = () => {
   );
 };
 const Profile = () => {
-  const [user, setUser] = useState<{ email?: string; walletAddress?: string; name?: string; avatarUrl?: string; username?: string; referralCode?: string } | null>(null);
+  const [user, setUser] = useState<{ email?: string; walletAddress?: string; name?: string; avatarUrl?: string; username?: string; referralCode?: string; githubId?: string | null; discordId?: string | null; twitterId?: string | null } | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [editUsername, setEditUsername] = useState('');
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+  const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const preferences = useAppPreferences();
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { alert('Image must be under 2MB'); return; }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileMessage({ type: 'error', text: 'Image must be under 2MB.' });
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       setEditAvatar(reader.result as string);
@@ -1856,78 +2966,271 @@ const Profile = () => {
     reader.readAsDataURL(file);
   };
 
-  const [securitySettings, setSecuritySettings] = useState([
-    { label: 'Two-Factor Authentication', status: 'Enabled', active: true },
-    { label: 'Hardware Key', status: 'Not Configured', active: false },
-    { label: 'Session Lockdown', status: 'Enabled', active: true },
-  ]);
+  useEffect(() => {
+    const fetchProfileContext = async () => {
+      try {
+        const [userRes, taskRes, historyRes] = await Promise.all([
+          fetch('/api/auth/me', { credentials: 'include' }),
+          fetch('/api/tasks', { credentials: 'include' }),
+          fetch('/api/mining/history', { credentials: 'include' }),
+        ]);
+        if (userRes.ok) setUser(await userRes.json());
+        if (taskRes.ok) setTasks(await taskRes.json());
+        if (historyRes.ok) setHistory(await historyRes.json());
+      } catch (err) {}
+    };
+    fetchProfileContext();
+    window.addEventListener('balance-updated', fetchProfileContext);
+    return () => window.removeEventListener('balance-updated', fetchProfileContext);
+  }, []);
 
-  const toggleSecurity = (index: number) => {
-    const newSettings = [...securitySettings];
-    newSettings[index].active = !newSettings[index].active;
-    newSettings[index].status = newSettings[index].active ? 'Enabled' : 'Disabled';
-    setSecuritySettings(newSettings);
+  const disconnectProvider = async (provider: 'github' | 'discord' | 'twitter') => {
+    try {
+      const res = await fetch(`/api/auth/unlink/${provider}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to disconnect account');
+      }
+
+      const data = await res.json();
+      setUser(data);
+    } catch (error: any) {
+      setProfileMessage({ type: 'error', text: error?.message || 'Failed to disconnect account' });
+    }
   };
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data);
-        }
-      } catch (err) { }
-    };
-    fetchUser();
-  }, []);
+  const completedTasks = tasks.filter((task) => task.completed).length;
+  const completedSessions = history.filter((entry) => !entry.isActive && Number(entry.pointsEarned || 0) > 0);
+  const identityLinks = user ? getConnectedIdentityCount(user) : 0;
+  const profileChecks = getProfileChecks(user);
+  const completedProfileChecks = profileChecks.filter(Boolean).length;
+  const profileCheckTotal = profileChecks.length;
+  const maskedWallet = maskWalletAddress(user?.walletAddress, preferences.privacy.maskWalletAddress);
+  const disclosureLabel = getProfileVisibilityLabel(preferences.privacy.profileVisibility);
+  const recoveryState = identityLinks >= 3 ? 'Strong recovery posture' : identityLinks >= 2 ? 'Recoverable' : 'Fragile';
+  const recoveryTone = identityLinks >= 3 ? 'text-realm-cyan border-realm-cyan/30 bg-realm-cyan/10' : identityLinks >= 2 ? 'text-amber-200 border-amber-400/20 bg-amber-400/10' : 'text-red-300 border-red-400/20 bg-red-400/10';
+
+  const identityProviders = [
+    {
+      key: 'google',
+      label: 'Google identity',
+      detail: user?.email || 'Not connected',
+      connected: Boolean(user?.email),
+      actionLabel: user?.email ? 'Sign out' : 'Connect',
+      actionType: user?.email ? 'logout' : 'link',
+      href: '/api/auth/google?returnTo=/?tab=profile',
+      icon: Mail,
+      accent: 'text-white',
+      description: user?.email ? 'Primary recovery email for session restoration.' : 'Attach a recoverable email identity.',
+    },
+    {
+      key: 'twitter',
+      label: 'X account',
+      detail: user?.twitterId || 'Not connected',
+      connected: Boolean(user?.twitterId),
+      actionLabel: user?.twitterId ? 'Disconnect' : 'Connect',
+      actionType: user?.twitterId ? 'unlink' : 'link',
+      href: '/api/auth/twitter?returnTo=/?tab=profile',
+      icon: Link2,
+      accent: 'text-white/70',
+      description: user?.twitterId ? 'Used for social proof and mission eligibility.' : 'Required for X-based community tasks.',
+    },
+    {
+      key: 'github',
+      label: 'GitHub',
+      detail: user?.githubId || 'Not connected',
+      connected: Boolean(user?.githubId),
+      actionLabel: user?.githubId ? 'Disconnect' : 'Connect',
+      actionType: user?.githubId ? 'unlink' : 'link',
+      href: '/api/auth/github?returnTo=/?tab=profile',
+      icon: Fingerprint,
+      accent: 'text-white/70',
+      description: user?.githubId ? 'Adds a durable secondary identity handle.' : 'Adds a second recovery-grade identity signal.',
+    },
+    {
+      key: 'discord',
+      label: 'Discord',
+      detail: user?.discordId || 'Not connected',
+      connected: Boolean(user?.discordId),
+      actionLabel: user?.discordId ? 'Disconnect' : 'Connect',
+      actionType: user?.discordId ? 'unlink' : 'link',
+      href: '/api/auth/discord?returnTo=/?tab=profile',
+      icon: ShieldCheck,
+      accent: 'text-white/70',
+      description: user?.discordId ? 'Supports community verification and role sync.' : 'Needed for Discord-gated actions and role sync.',
+    },
+    {
+      key: 'wallet',
+      label: 'Wallet',
+      detail: user?.walletAddress ? maskedWallet : 'Not connected',
+      connected: Boolean(user?.walletAddress),
+      actionLabel: user?.walletAddress ? 'Connected' : 'Open wallet connect',
+      actionType: user?.walletAddress ? 'none' : 'navigate',
+      href: '',
+      icon: Wallet,
+      accent: 'text-realm-cyan',
+      description: user?.walletAddress ? 'Ownership anchor used for node rewards and payout identity.' : 'Connect a wallet to anchor ownership and payouts.',
+    },
+  ] as const;
+
+  const hardeningChecklist = [
+    {
+      title: 'Recovery email present',
+      done: Boolean(user?.email),
+      detail: user?.email ? `Signed in as ${user.email}` : 'Add a recoverable email identity.',
+    },
+    {
+      title: 'At least two linked identities',
+      done: identityLinks >= 2,
+      detail: identityLinks >= 2 ? `${identityLinks} identities linked` : 'Link another provider to reduce account lockout risk.',
+    },
+    {
+      title: 'Wallet ownership anchored',
+      done: Boolean(user?.walletAddress),
+      detail: user?.walletAddress ? maskedWallet : 'Connect a wallet for payouts and node ownership proof.',
+    },
+    {
+      title: 'Profile basics are present',
+      done: completedProfileChecks >= 4,
+      detail: `${completedProfileChecks}/${profileCheckTotal} profile checks are complete across name, avatar, handle, and recoverability.`,
+    },
+    {
+      title: 'Security notifications are enabled',
+      done: preferences.notifications.securityAlerts,
+      detail: preferences.notifications.securityAlerts ? 'Identity-risk notifications are active.' : 'Turn on security notices in Settings.',
+    },
+  ];
+
+  const profilePreviewRows = [
+    { label: 'Display name', value: user?.name || 'Anonymous Node' },
+    { label: 'Handle', value: user?.username ? `@${user.username}` : 'Not set' },
+    { label: 'Email', value: user?.email || 'Hidden until connected' },
+    { label: 'Wallet', value: user?.walletAddress ? maskedWallet : 'Not connected' },
+    { label: 'Referral', value: preferences.privacy.showReferralCode && user?.referralCode ? user.referralCode : 'Hidden by preference' },
+  ];
+
+  const runProviderAction = async (provider: (typeof identityProviders)[number]) => {
+    if (provider.actionType === 'navigate') {
+      window.location.assign('/?tab=profile');
+      setProfileMessage({ type: 'error', text: 'Use the wallet control in the identity menu to attach your wallet.' });
+      return;
+    }
+
+    if (provider.actionType === 'link') {
+      window.location.assign(provider.href);
+      return;
+    }
+
+    if (provider.actionType === 'logout') {
+      window.location.assign('/api/auth/logout');
+      return;
+    }
+
+    if (provider.actionType === 'unlink') {
+      await disconnectProvider(provider.key as 'github' | 'discord' | 'twitter');
+      setProfileMessage({ type: 'success', text: `${provider.label} disconnected.` });
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-12 py-10">
-      <div className="flex items-end gap-8">
-        <div className="w-40 h-40 rounded-3xl bg-gradient-to-br from-realm-cyan/20 to-transparent border border-realm-cyan/30 p-1">
-          <div className="w-full h-full rounded-[22px] overflow-hidden bg-realm-surface flex items-center justify-center">
-            {user?.avatarUrl ? (
-              <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-            ) : user?.email ? (
-              <span className="text-4xl font-bold text-realm-cyan">{user.email[0].toUpperCase()}</span>
-            ) : (
-              <User size={48} className="text-white/20" />
-            )}
+      {profileMessage && (
+        <div
+          className={cn(
+            'rounded-2xl border px-5 py-4 text-sm',
+            profileMessage.type === 'success'
+              ? 'border-realm-cyan/30 bg-realm-cyan/10 text-realm-cyan'
+              : 'border-red-400/20 bg-red-400/10 text-red-200'
+          )}
+        >
+          {profileMessage.text}
+        </div>
+      )}
+
+      <div className="glass-panel overflow-hidden p-0">
+        <div className="grid gap-0 md:grid-cols-[1.25fr_0.75fr]">
+          <div className="space-y-6 p-8 md:p-10">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={cn('rounded-full border px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em]', recoveryTone)}>
+                {recoveryState}
+              </span>
+              <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+                Visibility {disclosureLabel}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-6 md:flex-row md:items-end">
+              <div className="w-28 h-28 rounded-3xl bg-gradient-to-br from-realm-cyan/20 to-transparent border border-realm-cyan/30 p-1">
+                <div className="w-full h-full rounded-[22px] overflow-hidden bg-realm-surface flex items-center justify-center">
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : user?.email ? (
+                    <span className="text-3xl font-bold text-realm-cyan">{user.email[0].toUpperCase()}</span>
+                  ) : (
+                    <User size={40} className="text-white/20" />
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1">
+                <h1 className="text-serif text-5xl italic text-white">
+                  {user?.name || user?.email?.split('@')[0] || maskedWallet || 'Anonymous Node'}
+                </h1>
+                <p className="mt-3 max-w-xl text-sm text-white/50">
+                  Identity-backed account record with live provider state and exact counts only.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3 text-sm text-white/55">
+                  {user?.username && <span className="text-realm-cyan">@{user.username}</span>}
+                  {user?.email && <span>{user.email}</span>}
+                  {user?.walletAddress && <span>{maskedWallet}</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/5 bg-white/[0.02] p-8 md:border-l md:border-t-0">
+            <div className="space-y-5">
+              <div>
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Identity checks</p>
+                <p className="mt-3 text-4xl font-semibold text-realm-cyan">{completedProfileChecks}/{profileCheckTotal}</p>
+                <p className="mt-2 text-sm text-white/45">Exact completion count, not a synthetic score.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Linked identities</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{identityLinks}</p>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Verified sessions</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{completedSessions.length}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setEditName(user?.name || '');
+                  setEditAvatar(user?.avatarUrl || '');
+                  setEditUsername(user?.username || '');
+                  setShowEditModal(true);
+                }}
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium text-white hover:bg-white/10 transition-all"
+              >
+                Edit profile identity
+              </button>
+            </div>
           </div>
         </div>
-        <div className="flex-1 pb-4">
-          <h1 className="text-serif text-5xl mb-2 italic">
-            {user?.name || user?.email?.split('@')[0] || user?.walletAddress?.slice(0, 12) || 'Anonymous Node'}
-          </h1>
-          <p className="text-white/40 font-mono text-sm">
-            {user?.username ? <span className="text-realm-cyan">@{user.username}</span> : ''}
-            {user?.email ? ` • ${user.email}` : ''}
-            {user?.walletAddress ? ` • ${user.walletAddress.slice(0,8)}...${user.walletAddress.slice(-4)}` : ''}
-          </p>
-          {user?.referralCode && (
-            <p className="text-white/30 font-mono text-xs mt-1">Referral Code: <span className="text-realm-cyan">{user.referralCode}</span></p>
-          )}
-        </div>
-        <button 
-          onClick={() => {
-            setEditName(user?.name || '');
-            setEditAvatar(user?.avatarUrl || '');
-            setEditUsername(user?.username || '');
-            setShowEditModal(true);
-          }}
-          className="mb-4 px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/10 transition-all"
-        >
-          Edit Profile
-        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
         {[
-          { label: 'Global Rank', value: '#–' },
-          { label: 'Uptime', value: '–' },
-          { label: 'Trust Score', value: user ? '72/100' : '–' },
-        ].map(stat => (
+          { label: 'Linked identities', value: `${identityLinks}` },
+          { label: 'Tasks completed', value: `${completedTasks}` },
+          { label: 'Reward sessions', value: `${completedSessions.length}` },
+        ].map((stat) => (
           <div key={stat.label} className="glass-panel p-8 text-center">
             <p className="text-[10px] text-white/40 font-mono uppercase tracking-widest mb-2">{stat.label}</p>
             <p className="text-3xl font-medium">{stat.value}</p>
@@ -1935,161 +3238,280 @@ const Profile = () => {
         ))}
       </div>
 
-      {/* Connected Accounts */}
       <div className="glass-panel p-10 space-y-6">
-        <h3 className="text-serif text-3xl">Connected Accounts</h3>
-        <div className="space-y-4">
-          <div className="flex justify-between items-center py-4 border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-white/60"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Google Account</p>
-                <p className="text-xs text-white/40 font-mono">{user?.email || 'Not connected'}</p>
-              </div>
-            </div>
-            {user?.email ? (
-              <a href={`${''}/api/auth/logout`} className="px-4 py-1.5 text-xs font-bold text-red-400 border border-red-400/20 rounded-lg hover:bg-red-400/10 transition-colors">Disconnect</a>
-            ) : (
-              <a href={`${''}/api/auth/google`} className="px-4 py-1.5 text-xs font-bold bg-white text-realm-black rounded-lg hover:bg-realm-cyan transition-colors">Connect</a>
-            )}
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <h3 className="text-serif text-3xl">Account record</h3>
+            <p className="mt-2 text-sm text-white/40">
+              These rows use exact states and counts only, so the account surface stays grounded.
+            </p>
           </div>
-
-          <div className="flex justify-between items-center py-4 border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-white/60"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.258 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium">X (Twitter)</p>
-                <p className="text-xs text-white/40 font-mono">Not connected</p>
-              </div>
-            </div>
-            <a href={`${''}/api/auth/twitter`} className="px-4 py-1.5 text-xs font-bold bg-white text-realm-black rounded-lg hover:bg-realm-cyan transition-colors">Connect</a>
+          <div className="rounded-2xl border border-realm-cyan/20 bg-realm-cyan/10 px-5 py-4 text-right">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-realm-cyan/70">Recovery status</p>
+            <p className="mt-2 text-2xl font-semibold text-realm-cyan">{recoveryState}</p>
           </div>
+        </div>
 
-          <div className="flex justify-between items-center py-4 border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-white/60"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium">GitHub</p>
-                <p className="text-xs text-white/40 font-mono">Not connected</p>
-              </div>
-            </div>
-            <a href={`${''}/api/auth/github`} className="px-4 py-1.5 text-xs font-bold bg-white text-realm-black rounded-lg hover:bg-realm-cyan transition-colors">Connect</a>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Identity checks</p>
+            <p className="mt-4 text-2xl font-semibold text-white">{completedProfileChecks}/{profileCheckTotal}</p>
+            <p className="mt-1 text-xs text-white/35">Name, handle, avatar, primary identity, and recovery coverage</p>
           </div>
-
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-white/60"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.244-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Telegram</p>
-                <p className="text-xs text-white/40 font-mono">Not connected</p>
-              </div>
-            </div>
-            <a href="https://t.me/REALMxAI" target="_blank" rel="noreferrer" className="px-4 py-1.5 text-xs font-bold border border-white/10 rounded-lg hover:border-realm-cyan hover:text-realm-cyan transition-colors">Join Community</a>
+          <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Verified payouts</p>
+            <p className="mt-4 text-2xl font-semibold text-white">{completedSessions.length}</p>
+            <p className="mt-1 text-xs text-white/35">Completed mining sessions with credited rewards</p>
+          </div>
+          <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Profile disclosure</p>
+            <p className="mt-4 text-2xl font-semibold text-white">{disclosureLabel}</p>
+            <p className="mt-1 text-xs text-white/35">Mirrors the active privacy posture configured in Settings</p>
           </div>
         </div>
       </div>
 
-      <div className="glass-panel p-10 space-y-8">
-        <h3 className="text-serif text-3xl">Account Security</h3>
-        <div className="space-y-6">
-          {securitySettings.map((item, index) => (
-            <div key={item.label} className="flex justify-between items-center py-4 border-b border-white/5 last:border-0">
-              <div>
-                <p className="font-medium">{item.label}</p>
-                <p className="text-xs text-white/40 font-mono">{item.status}</p>
+      <div className="glass-panel p-10 space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-serif text-3xl">Identity hardening checklist</h3>
+            <p className="mt-2 text-sm text-white/40">
+              A trustworthy profile should explain what is still missing and why it matters.
+            </p>
+          </div>
+          <a href="/?tab=settings" className="text-sm text-realm-cyan hover:text-white transition-colors">
+            Adjust settings
+          </a>
+        </div>
+        <div className="space-y-4">
+          {hardeningChecklist.map((item) => (
+            <div key={item.title} className="flex items-start justify-between gap-4 rounded-2xl border border-white/8 bg-white/[0.02] px-5 py-4">
+              <div className="flex items-start gap-3">
+                <div className={cn('mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl border', item.done ? 'border-realm-cyan/30 bg-realm-cyan/10 text-realm-cyan' : 'border-white/10 bg-white/[0.03] text-white/40')}>
+                  {item.done ? <BadgeCheck size={16} /> : <ShieldAlert size={16} />}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">{item.title}</p>
+                  <p className="mt-1 text-xs font-mono text-white/40">{item.detail}</p>
+                </div>
               </div>
-              <button 
-                onClick={() => toggleSecurity(index)}
-                className={cn(
-                  "w-12 h-6 rounded-full p-1 transition-colors duration-300",
-                  item.active ? "bg-realm-cyan" : "bg-white/10"
-                )}
-              >
-                <div className={cn(
-                  "w-4 h-4 bg-white rounded-full transition-transform duration-300",
-                  item.active ? "translate-x-6" : "translate-x-0"
-                )} />
-              </button>
+              <span className={cn('rounded-full px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em]', item.done ? 'bg-realm-cyan/10 text-realm-cyan' : 'bg-white/5 text-white/45')}>
+                {item.done ? 'Complete' : 'Needs action'}
+              </span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Edit Profile Modal */}
+      <div className="glass-panel p-10 space-y-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-serif text-3xl">Connected identities</h3>
+            <p className="mt-2 text-sm text-white/40">
+              Every row here maps to a real provider state. No placeholders, no meaningless toggles.
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+            {identityLinks} linked
+          </div>
+        </div>
+        <div className="space-y-4">
+          {identityProviders.map((provider) => {
+            const Icon = provider.icon;
+            return (
+              <div key={provider.key} className="flex flex-col gap-4 rounded-2xl border border-white/8 bg-white/[0.02] p-5 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
+                    <Icon size={18} className={provider.accent} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <p className="font-medium text-white">{provider.label}</p>
+                      <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.2em]', provider.connected ? 'bg-realm-cyan/10 text-realm-cyan' : 'bg-white/5 text-white/40')}>
+                        {provider.connected ? 'Connected' : 'Missing'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs font-mono text-white/40">{provider.detail}</p>
+                    <p className="mt-2 text-sm text-white/50">{provider.description}</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => void runProviderAction(provider)}
+                  disabled={provider.actionType === 'none'}
+                  className={cn(
+                    'rounded-xl px-4 py-2 text-sm font-semibold transition-all',
+                    provider.actionType === 'none'
+                      ? 'cursor-default border border-white/10 text-white/35'
+                      : provider.connected && provider.actionType !== 'logout'
+                        ? 'border border-red-400/20 text-red-300 hover:bg-red-400/10'
+                        : 'bg-white text-realm-black hover:bg-realm-cyan'
+                  )}
+                >
+                  {provider.actionLabel}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-[1.05fr_0.95fr]">
+        <div className="glass-panel p-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-serif text-3xl">Profile disclosure preview</h3>
+              <p className="mt-2 text-sm text-white/40">
+                This is the visible identity posture created by your current settings.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+              {preferences.privacy.maskWalletAddress ? <EyeOff size={12} /> : <Eye size={12} />}
+              {disclosureLabel}
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {profilePreviewRows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-3">
+                <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">{row.label}</span>
+                <span className="max-w-[60%] truncate text-sm text-white/70">{row.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="glass-panel p-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-serif text-3xl">Operational posture</h3>
+              <p className="mt-2 text-sm text-white/40">
+                The account reads as more credible when privacy, refresh behavior, and alerts are internally consistent.
+              </p>
+            </div>
+            <Globe size={18} className="text-realm-cyan" />
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {[
+              {
+                icon: TimerReset,
+                label: 'Refresh cadence',
+                value: formatRefreshInterval(preferences.workspace.refreshIntervalMs),
+                detail: 'Applied to live workspace polling.',
+              },
+              {
+                icon: preferences.workspace.hidePointBalance ? EyeOff : Eye,
+                label: 'Balance visibility',
+                value: preferences.workspace.hidePointBalance ? 'Masked' : 'Visible',
+                detail: 'Controls exposed point totals in shared views.',
+              },
+              {
+                icon: preferences.notifications.securityAlerts ? Siren : Lock,
+                label: 'Security notice feed',
+                value: preferences.notifications.securityAlerts ? 'Active' : 'Muted',
+                detail: 'Used for identity-risk and recovery warnings.',
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03]">
+                      <Icon size={16} className="text-realm-cyan" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{item.label}</p>
+                      <p className="text-xs font-mono text-white/35">{item.value}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm text-white/50">{item.detail}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-           <div className="bg-realm-surface border border-realm-border p-8 rounded-xl w-[400px] max-w-[90vw] flex flex-col gap-6">
-              <div className="flex justify-between items-center border-b border-white/5 pb-4">
-                 <h2 className="text-xl font-bold text-white">Edit Profile</h2>
-                 <button onClick={() => setShowEditModal(false)} className="text-white/40 hover:text-white text-2xl">&times;</button>
+          <div className="bg-realm-surface border border-realm-border p-8 rounded-xl w-[400px] max-w-[90vw] flex flex-col gap-6">
+            <div className="flex justify-between items-center border-b border-white/5 pb-4">
+              <h2 className="text-xl font-bold text-white">Edit Profile</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-white/40 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] text-white/40 font-mono uppercase">Display Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:border-realm-cyan outline-none transition-all"
+                  placeholder="Enter new name"
+                />
               </div>
-                 <div className="space-y-4">
-                    <div className="space-y-2">
-                       <label className="text-[10px] text-white/40 font-mono uppercase">Display Name</label>
-                       <input 
-                          type="text" 
-                          value={editName}
-                          onChange={e => setEditName(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:border-realm-cyan outline-none transition-all"
-                          placeholder="Enter new name"
-                       />
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-[10px] text-white/40 font-mono uppercase">Username</label>
-                       <input 
-                          type="text" 
-                          value={editUsername}
-                          onChange={e => setEditUsername(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:border-realm-cyan outline-none transition-all"
-                          placeholder="your_username"
-                       />
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-[10px] text-white/40 font-mono uppercase">Profile Photo</label>
-                       <input type="file" ref={fileInputRef} accept="image/*" onChange={handleFileUpload} className="hidden" />
-                       <div className="flex items-center gap-3">
-                         {editAvatar && <img src={editAvatar} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-white/10" />}
-                         <button 
-                           type="button"
-                           onClick={() => fileInputRef.current?.click()}
-                           className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white/60 hover:text-white hover:border-realm-cyan transition-all"
-                         >
-                           {editAvatar ? 'Change Photo' : 'Upload Photo'}
-                         </button>
-                         {editAvatar && <button type="button" onClick={() => setEditAvatar('')} className="text-xs text-red-400 hover:text-red-300">Remove</button>}
-                       </div>
-                    </div>
-                 </div>
-              <div className="flex gap-4 mt-4">
-                 <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 text-xs font-bold text-white/60 hover:text-white border border-white/10 rounded-xl transition-colors">Cancel</button>
-                 <button 
-                    onClick={async () => {
-                       try {
-                          const res = await fetch('/api/users/me', {
-                             method: 'PUT',
-                             headers: { 'Content-Type': 'application/json' },
-                             body: JSON.stringify({ name: editName, avatarUrl: editAvatar, username: editUsername }),
-                             credentials: 'include'
-                          });
-                          if (res.ok) {
-                             const updatedUser = await res.json();
-                             setUser(updatedUser);
-                          }
-                       } catch (e) {}
-                       setShowEditModal(false);
-                    }} 
-                    className="flex-1 py-3 bg-realm-cyan text-realm-black text-xs font-bold rounded-xl hover:shadow-[0_0_15px_rgba(61,242,224,0.3)] transition-all"
-                 >Save Changes</button>
+              <div className="space-y-2">
+                <label className="text-[10px] text-white/40 font-mono uppercase">Username</label>
+                <input
+                  type="text"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:border-realm-cyan outline-none transition-all"
+                  placeholder="your_username"
+                />
               </div>
-           </div>
+              <div className="space-y-2">
+                <label className="text-[10px] text-white/40 font-mono uppercase">Profile Photo</label>
+                <input type="file" ref={fileInputRef} accept="image/*" onChange={handleFileUpload} className="hidden" />
+                <div className="flex items-center gap-3">
+                  {editAvatar && <img src={editAvatar} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-white/10" />}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white/60 hover:text-white hover:border-realm-cyan transition-all"
+                  >
+                    {editAvatar ? 'Change Photo' : 'Upload Photo'}
+                  </button>
+                  {editAvatar && (
+                    <button type="button" onClick={() => setEditAvatar('')} className="text-xs text-red-400 hover:text-red-300">
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-4 mt-4">
+              <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 text-xs font-bold text-white/60 hover:text-white border border-white/10 rounded-xl transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/users/me', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: editName, avatarUrl: editAvatar, username: editUsername }),
+                      credentials: 'include',
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                      throw new Error(data.error || 'Failed to update profile');
+                    }
+                    setUser(data);
+                    setEditAvatar(data.avatarUrl || '');
+                    setShowEditModal(false);
+                    setProfileMessage({ type: 'success', text: 'Profile identity updated.' });
+                  } catch (e: any) {
+                    setProfileMessage({ type: 'error', text: e?.message || 'Failed to update profile' });
+                  }
+                }}
+                className="flex-1 py-3 bg-realm-cyan text-realm-black text-xs font-bold rounded-xl hover:shadow-[0_0_15px_rgba(61,242,224,0.3)] transition-all"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2098,11 +3520,63 @@ const Profile = () => {
 
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    const allowedTabs = new Set(['dashboard', 'leaderboard', 'node', 'mining', 'wallet', 'tasks', 'referrals', 'profile', 'settings']);
+    return tab && allowedTabs.has(tab) ? tab : 'dashboard';
+  });
 
   // ---- Shared Mining Session State ----
   const [miningActive, setMiningActive] = useState<boolean>(() => isSessionActive());
   const [sessionSecs, setSessionSecs] = useState<number>(() => getSessionElapsed());
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateMiningState = async () => {
+      try {
+        const res = await fetch('/api/mining/status', { credentials: 'include' });
+        if (res.status === 401) {
+          if (!cancelled) {
+            setMiningActive(false);
+            setSessionSecs(0);
+            localStorage.removeItem('realmx_mining_session');
+          }
+          return;
+        }
+
+        if (!res.ok) {
+          return;
+        }
+
+        const data = await res.json();
+        if (cancelled) {
+          return;
+        }
+
+        if (data.active) {
+          const startedAtMs = data.startedAt ? new Date(data.startedAt).getTime() : Date.now() - (data.sessionSeconds || 0) * 1000;
+          setMiningActive(true);
+          setSessionSecs(data.sessionSeconds || 0);
+          saveMiningSession({ startedAt: startedAtMs, active: true });
+          return;
+        }
+
+        setMiningActive(false);
+        setSessionSecs(0);
+        localStorage.removeItem('realmx_mining_session');
+        window.dispatchEvent(new Event('balance-updated'));
+      } catch {
+        // Keep the optimistic local session as a fallback if the status call fails.
+      }
+    };
+
+    hydrateMiningState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!miningActive) return;
@@ -2117,7 +3591,7 @@ export default function App() {
              await fetch(`${API_URL}/api/mining/sync`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ sessionSeconds: 3600 }),
+               body: JSON.stringify({ sessionSeconds: next }),
                credentials: 'include'
              });
           };
@@ -2127,7 +3601,7 @@ export default function App() {
         if (next >= SESSION_DURATION) {
           // Session expired
           setMiningActive(false);
-          saveMiningSession({ startedAt: Date.now() - SESSION_DURATION * 1000, active: false });
+          localStorage.removeItem('realmx_mining_session');
           
           // Final sync
           const finalSync = async () => {
@@ -2135,9 +3609,10 @@ export default function App() {
             await fetch(`${API_URL}/api/mining/sync`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sessionSeconds: next % 3600 }),
+              body: JSON.stringify({ sessionSeconds: SESSION_DURATION, stopMining: true }),
               credentials: 'include'
             });
+            window.dispatchEvent(new Event('balance-updated'));
           };
           finalSync();
 
@@ -2149,13 +3624,10 @@ export default function App() {
     return () => clearInterval(timer);
   }, [miningActive]);
 
-  const handleToggleMining = async () => {
+
+  const handleMiningAction = async () => {
     if (miningActive) {
-      // Stop: sync to backend with stopMining flag so balance gets credited
-      setMiningActive(false);
       const elapsedSecs = sessionSecs;
-      setSessionSecs(0);
-      saveMiningSession({ startedAt: Date.now(), active: false });
       try {
         const res = await fetch('/api/mining/sync', {
           method: 'POST',
@@ -2163,22 +3635,38 @@ export default function App() {
           body: JSON.stringify({ sessionSeconds: elapsedSecs, stopMining: true }),
           credentials: 'include'
         });
-        if (res.ok) {
-          const data = await res.json();
-          // Balance was credited on the backend — force TopBar refresh
-          window.dispatchEvent(new Event('balance-updated'));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.message || data.error || 'Unable to stop mining session');
         }
-      } catch (e) {}
-    } else {
-      // Start: always update state immediately
+        setMiningActive(false);
+        setSessionSecs(0);
+        localStorage.removeItem('realmx_mining_session');
+        window.dispatchEvent(new Event('balance-updated'));
+      } catch (e: any) {
+        alert(e?.message || 'Failed to stop mining session.');
+      }
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/mining/start', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (res.status === 401) {
+        throw new Error('Sign in first to start mining and earn points.');
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Unable to start mining session');
+      }
       const now = Date.now();
       setMiningActive(true);
       setSessionSecs(0);
       saveMiningSession({ startedAt: now, active: true });
-      fetch('/api/mining/start', {
-        method: 'POST',
-        credentials: 'include'
-      }).catch(() => {});
+    } catch (e: any) {
+      alert(e?.message || 'Failed to start mining session.');
     }
   };
 
@@ -2193,7 +3681,7 @@ export default function App() {
       <TopBar onNavigate={(t) => setActiveTab(t)} />
 
       <main className="pl-0 md:pl-64 pt-20 min-h-screen">
-        <div className="max-w-7xl mx-auto p-12">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 xl:px-10 xl:py-10">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -2202,12 +3690,12 @@ export default function App() {
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
-              {activeTab === 'dashboard' && <Dashboard miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleToggleMining} onNavigate={(t) => setActiveTab(t)} />}
+              {activeTab === 'dashboard' && <Dashboard miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} onNavigate={(t) => setActiveTab(t)} />}
               {activeTab === 'leaderboard' && <Leaderboard />}
               {activeTab === 'node' && <NodePage />}
-              {activeTab === 'mining' && <MiningPage miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleToggleMining} />}
+              {activeTab === 'mining' && <MiningPage miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} />}
               {activeTab === 'wallet' && <WalletPage />}
-              {activeTab === 'tasks' && <TasksPage />}
+              {activeTab === 'tasks' && <TasksPageV2 onNavigate={(t) => setActiveTab(t)} />}
               {activeTab === 'referrals' && <ReferralsPage />}
               {activeTab === 'profile' && <Profile />}
               {activeTab === 'settings' && <SettingsPage />}

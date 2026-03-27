@@ -10,10 +10,45 @@ const isAuthenticated = (req: any, res: any, next: any) => {
   res.status(401).json({ message: 'Unauthorized' });
 };
 
-// GET /api/referral — returns the user's referral code + list of referred users
+function generateReferralCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i += 1) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `REALM-${code}`;
+}
+
+async function ensureReferralCode(userId: string) {
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { referralCode: true },
+  });
+
+  if (existing?.referralCode?.startsWith('REALM-')) {
+    return existing.referralCode;
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const updated = await prisma.user.update({
+        where: { id: userId },
+        data: { referralCode: generateReferralCode() },
+        select: { referralCode: true },
+      });
+      return updated.referralCode;
+    } catch (error: any) {
+      if (error.code !== 'P2002' || attempt === 4) throw error;
+    }
+  }
+
+  throw new Error('Failed to generate unique referral code');
+}
+
 router.get('/', isAuthenticated, async (req: any, res: any) => {
   try {
     const userId = req.user.id;
+    const referralCode = await ensureReferralCode(userId);
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -23,31 +58,56 @@ router.get('/', isAuthenticated, async (req: any, res: any) => {
             email: true,
             walletAddress: true,
             name: true,
+            username: true,
             points: true,
             createdAt: true,
-          }
+            miningSessions: {
+              select: {
+                pointsEarned: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
         },
         rewardsEarned: true,
-      }
+      },
     });
 
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const referrals = user.referrals.map((r: any) => ({
-      name: r.name || r.email?.split('@')[0] || r.walletAddress?.slice(0, 10) || 'Anonymous',
-      address: r.walletAddress || r.email || r.id.slice(0, 12),
-      event: 'Node Activated',
-      status: 'active',
-      time: new Date(r.createdAt).toLocaleDateString(),
-      rewardEarned: user.rewardsEarned
-        .filter((rw: any) => rw.refereeId === r.id)
-        .reduce((sum: number, rw: any) => sum + rw.amount, 0),
-    }));
+    const rewardsByReferee = new Map<string, number>();
+    for (const reward of user.rewardsEarned) {
+      rewardsByReferee.set(
+        reward.refereeId,
+        (rewardsByReferee.get(reward.refereeId) || 0) + reward.amount,
+      );
+    }
+
+    const referrals = user.referrals.map((referral: any) => {
+      const totalMined = referral.miningSessions.reduce(
+        (sum: number, session: any) => sum + session.pointsEarned,
+        0,
+      );
+      const isActive = referral.miningSessions.some((session: any) => session.isActive);
+
+      return {
+        id: referral.id,
+        name: referral.name || referral.username || referral.email?.split('@')[0] || referral.walletAddress?.slice(0, 10) || 'Anonymous',
+        address: referral.walletAddress || referral.email || referral.username || referral.id.slice(0, 12),
+        event: 'Referral linked',
+        status: isActive ? 'active' : 'inactive',
+        time: new Date(referral.createdAt).toLocaleDateString(),
+        rewardEarned: rewardsByReferee.get(referral.id) || 0,
+        referredUserPoints: referral.points,
+        totalMined,
+      };
+    });
 
     res.json({
-      code: user.referralCode,
+      code: referralCode,
       referrals,
-      totalRewards: user.rewardsEarned.reduce((s: number, r: any) => s + r.amount, 0),
+      totalRewards: user.rewardsEarned.reduce((sum: number, reward: any) => sum + reward.amount, 0),
     });
   } catch (err: any) {
     logger.error('Error fetching referrals:', err);
@@ -55,8 +115,8 @@ router.get('/', isAuthenticated, async (req: any, res: any) => {
   }
 });
 
-// POST /api/referral — apply a referral code
-router.post('/',
+router.post(
+  '/',
   body('code').isString().isLength({ min: 4 }).withMessage('Invalid referral code format'),
   body('userId').optional().isUUID().withMessage('Invalid user id format'),
   async (req: any, res: any) => {
@@ -65,7 +125,12 @@ router.post('/',
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { code, userId } = req.body;
+    const code = String(req.body.code).trim().toUpperCase();
+    const targetUserId = req.user?.id || req.body.userId;
+
+    if (!targetUserId) {
+      return res.status(401).json({ error: 'Sign in before applying a referral code' });
+    }
 
     try {
       const referrer = await prisma.user.findUnique({ where: { referralCode: code } });
@@ -73,41 +138,49 @@ router.post('/',
         return res.status(404).json({ error: 'Referral code not found' });
       }
 
-      if (userId) {
-        if (referrer.id === userId) {
-          return res.status(400).json({ error: 'Cannot refer yourself' });
-        }
-        const currentUser = await prisma.user.findUnique({ where: { id: userId } });
-        if (currentUser?.referredById) {
-          return res.status(400).json({ error: 'Already referred by someone' });
-        }
-
-        // Link user + create reward in a transaction
-        await prisma.$transaction([
-          prisma.user.update({
-            where: { id: userId },
-            data: { referredById: referrer.id }
-          }),
-          prisma.referralReward.create({
-            data: {
-              referrerId: referrer.id,
-              refereeId: userId,
-              amount: 10
-            }
-          }),
-          // Also credit the referrer's points
-          prisma.user.update({
-            where: { id: referrer.id },
-            data: { points: { increment: 10 } }
-          })
-        ]);
+      if (referrer.id === targetUserId) {
+        return res.status(400).json({ error: 'Cannot refer yourself' });
       }
+
+      const currentUser = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { id: true, referredById: true },
+      });
+
+      if (!currentUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (currentUser.referredById) {
+        return res.status(400).json({ error: 'Already referred by someone' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: targetUserId },
+          data: { referredById: referrer.id },
+        });
+
+        await tx.referralReward.create({
+          data: {
+            referrerId: referrer.id,
+            refereeId: targetUserId,
+            amount: 10,
+          },
+        });
+
+        await tx.user.update({
+          where: { id: referrer.id },
+          data: { points: { increment: 10 } },
+        });
+      });
 
       res.status(200).json({ success: true, referrerId: referrer.id });
     } catch (err: any) {
       logger.error('Error applying referral:', err);
       res.status(500).json({ error: 'Internal server error' });
     }
-  });
+  },
+);
 
 export default router;

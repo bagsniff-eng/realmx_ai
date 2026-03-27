@@ -35,7 +35,15 @@ router.put('/me', isAuthenticated, async (req: any, res: any) => {
       where: { id: req.user.id },
       data: updateData
     });
-    res.json(updated);
+
+    req.login(updated, (loginErr: any) => {
+      if (loginErr) {
+        logger.error('Error refreshing session after profile update:', loginErr);
+        return res.status(500).json({ error: 'Profile updated but session refresh failed' });
+      }
+
+      return res.json(updated);
+    });
   } catch (err: any) {
     logger.error('Error updating profile:', err);
     res.status(500).json({ error: 'Failed to update profile' });
@@ -67,11 +75,14 @@ router.get('/leaderboard', async (req, res) => {
       }
     });
 
-    const leaderboard = topUsers.map((u: any, index: number) => ({
+    const leaderboard = topUsers.map((u: any, index: number) => {
+      const publicId = u.username || `node_${String(u.id).slice(0, 8)}`;
+
+      return {
       rank: index + 1,
-      name: u.name || u.username || u.email?.split('@')[0] || 'Anonymous',
+      name: u.name || u.username || publicId,
       username: u.username,
-      address: u.walletAddress || u.email || u.username,
+      publicId,
       avatarUrl: u.avatarUrl,
       points: u.points,
       totalPoints: u.points,
@@ -79,7 +90,8 @@ router.get('/leaderboard', async (req, res) => {
       isOnline: u.miningSessions.length > 0,
       status: u.miningSessions.length > 0 ? 'Active' : 'Offline',
       joinedAt: u.createdAt,
-    }));
+      };
+    });
 
     res.json(leaderboard);
   } catch (err: any) {

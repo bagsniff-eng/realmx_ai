@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
 
-/**
- * Wallet providers are loaded dynamically to prevent module-level crashes
- * from causing a blank page. If wallet modules fail to load, the app
- * still renders without wallet functionality.
- */
+function ProviderStatusScreen({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="min-h-screen bg-realm-black text-realm-text-primary flex items-center justify-center px-6">
+      <div className="w-full max-w-md rounded-2xl border border-realm-border bg-realm-surface p-8 text-center">
+        <h1 className="text-xl font-semibold text-realm-cyan">{title}</h1>
+        <p className="mt-3 text-sm text-realm-text-secondary">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 function WalletProviderWrapper({ children }: { children: React.ReactNode }) {
-  const [WalletLayer, setWalletLayer] = useState<React.ComponentType<{ children: React.ReactNode }> | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [walletLayer, setWalletLayer] = useState<React.ComponentType<{ children: React.ReactNode }> | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
 
   useEffect(() => {
     let cancelled = false;
@@ -32,12 +38,10 @@ function WalletProviderWrapper({ children }: { children: React.ReactNode }) {
           ssr: false,
         });
 
-        // Import rainbowkit styles
         await import('@rainbow-me/rainbowkit/styles.css');
 
         if (cancelled) return;
 
-        // Create a wrapper component with the loaded modules
         const Wrapper = ({ children: inner }: { children: React.ReactNode }) => (
           <wagmi.WagmiProvider config={config}>
             <QueryClientProvider client={queryClient}>
@@ -49,43 +53,71 @@ function WalletProviderWrapper({ children }: { children: React.ReactNode }) {
         );
 
         setWalletLayer(() => Wrapper);
+        setStatus('ready');
       } catch (err) {
         console.error('[REALMxAI] Failed to load wallet providers:', err);
-        if (!cancelled) setFailed(true);
+        if (!cancelled) setStatus('failed');
       }
     }
 
     loadWalletProviders();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Wallet providers loaded successfully
-  if (WalletLayer) {
+  if (walletLayer) {
+    const WalletLayer = walletLayer;
     return <WalletLayer>{children}</WalletLayer>;
   }
 
-  // Still loading or failed — render without wallet providers
-  return <>{children}</>;
+  if (status === 'failed') {
+    return (
+      <ProviderStatusScreen
+        title="Wallet initialization failed"
+        description="The dashboard could not initialize its wallet layer. Refresh the page and try again."
+      />
+    );
+  }
+
+  return (
+    <ProviderStatusScreen
+      title="Initializing REALMxAI"
+      description="Loading secure wallet and session providers."
+    />
+  );
 }
 
 class ProviderErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null }
 > {
+  declare props: { children: React.ReactNode };
+  declare state: { hasError: boolean; error: Error | null };
+
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null };
   }
+
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
+
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[REALMxAI] Provider error:', error, info);
   }
+
   render() {
     if (this.state.hasError) {
-      return <>{this.props.children}</>;
+      return (
+        <ProviderStatusScreen
+          title="Provider initialization failed"
+          description={this.state.error?.message || 'A provider dependency failed during startup.'}
+        />
+      );
     }
+
     return this.props.children;
   }
 }
@@ -93,11 +125,7 @@ class ProviderErrorBoundary extends React.Component<
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ProviderErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <WalletProviderWrapper>
-          {children}
-        </WalletProviderWrapper>
-      </QueryClientProvider>
+      <WalletProviderWrapper>{children}</WalletProviderWrapper>
     </ProviderErrorBoundary>
   );
 }

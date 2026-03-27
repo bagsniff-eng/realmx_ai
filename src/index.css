@@ -16,24 +16,105 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-realm-black text-realm-text-primary font-sans selection:bg-realm-cyan selection:text-realm-black;
     /* Faint directional top gradient — hardware feel, not landing page */
-    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.012) 0%, transparent 120px);
+    background-image:
+      radial-gradient(circle at top right, rgba(47, 230, 210, 0.06), transparent 26%),
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 22%),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.012) 0%, transparent 120px);
     background-attachment: fixed;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  img {
+    display: block;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(47, 230, 210, 0.32);
+    background-clip: padding-box;
   }
 
   * {
     box-sizing: border-box;
+  }
+
+  button,
+  a[href] {
+    transition:
+      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      filter 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  button:not(:disabled):hover,
+  a[href]:hover {
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  button:not(:disabled):active,
+  a[href]:active {
+    transform: translateY(1px) scale(0.985);
+    filter: brightness(0.96);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  button:focus-visible,
+  a[href]:focus-visible {
+    outline: 1px solid rgba(47, 230, 210, 0.45);
+    outline-offset: 2px;
   }
 }
 
 @layer components {
   /* System panel — flat, engineered surface. No blur, no glow. */
   .glass-panel {
-    background-color: var(--color-realm-surface);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+      var(--color-realm-surface);
     border: 1px solid var(--color-realm-border);
-    border-radius: 8px;
+    border-radius: 14px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      0 24px 60px rgba(0, 0, 0, 0.22);
+    transition:
+      border-color 180ms ease,
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 180ms ease;
+  }
+
+  .glass-panel:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 26px 72px rgba(0, 0, 0, 0.24);
   }
 
   .system-panel {
@@ -123,5 +204,19 @@
     opacity: 1;
     transform: translateY(0);
     transition: opacity 200ms ease, transform 200ms ease;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

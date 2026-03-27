@@ -1,27 +1,62 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
 import './index.css';
-import { Providers } from './Providers.tsx';
+
+console.log('[REALMxAI] Step 1: Core imports loaded');
+
+// Lazy import App and Providers to catch import-time crashes
+let App: any;
+let Providers: any;
+
+console.log('[REALMxAI] Step 2: Setting up global error handlers');
+
+function isExtensionOriginError(message?: string, stack?: string, filename?: string) {
+  const source = [message, stack, filename].filter(Boolean).join('\n');
+  return (
+    source.includes('chrome-extension://') ||
+    source.includes('runtime.sendMessage') ||
+    source.includes('Extension ID') ||
+    source.includes('inpage.js')
+  );
+}
 
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (e) => {
+    if (isExtensionOriginError(e.message, e.error?.stack, e.filename)) {
+      console.warn('[REALMxAI] Ignoring extension script error:', e.message);
+      return;
+    }
+    console.error('[REALMxAI] GLOBAL ERROR:', e.message, e.error?.stack);
     document.body.innerHTML = `<div style="padding: 20px; color: red; background: black; z-index: 9999; position: absolute; inset: 0; font-family: monospace;"><h1>Global Error Catch</h1><pre>${e.message}\\n${e.error?.stack || ''}</pre></div>`;
   });
   window.addEventListener('unhandledrejection', (e) => {
+    const message = e.reason?.message || String(e.reason || '');
+    const stack = e.reason?.stack || '';
+    if (isExtensionOriginError(message, stack)) {
+      console.warn('[REALMxAI] Ignoring extension promise rejection:', message);
+      return;
+    }
+    console.error('[REALMxAI] UNHANDLED REJECTION:', message);
     document.body.innerHTML = `<div style="padding: 20px; color: #ff55aa; background: black; z-index: 9999; position: absolute; inset: 0; font-family: monospace;"><h1>Unhandled Promise Rejection</h1><pre>${e.reason?.message || e.reason}\\n${e.reason?.stack || ''}</pre></div>`;
   });
 }
 
+console.log('[REALMxAI] Step 3: Checking root element');
+
 const rootEl = document.getElementById('root');
-if (rootEl && rootEl.innerHTML === '') {
-  rootEl.innerHTML = '<div style="color: #3DF2E0; padding: 20px; font-family: monospace;">[1] Bootstrapping Application... (If stuck here, React failed to mount)</div>';
+if (rootEl) {
+  rootEl.innerHTML = '<div style="color: #3DF2E0; padding: 20px; font-family: monospace;">[1] Bootstrapping Application...</div>';
 }
+
+console.log('[REALMxAI] Step 4: Defining error boundary');
 
 class AppErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null }
 > {
+  declare props: { children: React.ReactNode };
+  declare state: { hasError: boolean; error: Error | null };
+
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -51,11 +86,34 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
-createRoot(document.getElementById('root')!).render(
-  <AppErrorBoundary>
-    <Providers>
-      <App />
-    </Providers>
-  </AppErrorBoundary>,
-);
+console.log('[REALMxAI] Step 5: Loading App and CSS modules');
 
+async function bootstrap() {
+  try {
+    console.log('[REALMxAI] Step 5a: CSS already loaded, importing App');
+    const appModule = await import('./App.tsx');
+    App = appModule.default;
+    console.log('[REALMxAI] Step 5b: App loaded, importing Providers');
+    const provModule = await import('./Providers.tsx');
+    Providers = provModule.Providers;
+    console.log('[REALMxAI] Step 6: All modules loaded, rendering');
+
+    createRoot(document.getElementById('root')!).render(
+      <AppErrorBoundary>
+        <Providers>
+          <App />
+        </Providers>
+      </AppErrorBoundary>,
+    );
+    console.log('[REALMxAI] Step 7: React render called successfully');
+  } catch (err: any) {
+    console.error('[REALMxAI] BOOTSTRAP FATAL:', err);
+    document.getElementById('root')!.innerHTML = `<div style="padding: 40px; color: #ff5555; background: #0A0D10; font-family: monospace; min-height: 100vh;">
+      <h1 style="color: #2FE6D2;">REALMxAI — Boot Failure</h1>
+      <pre style="color: #ff5555; white-space: pre-wrap; margin-top: 20px;">${err?.message || err}\n\n${err?.stack || ''}</pre>
+      <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 24px; background: #2FE6D2; color: #0A0D10; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">Reload</button>
+    </div>`;
+  }
+}
+
+bootstrap();

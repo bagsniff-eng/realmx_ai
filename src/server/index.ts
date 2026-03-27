@@ -8,6 +8,7 @@ import { Server } from 'socket.io';
 import session from 'express-session';
 import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import { prisma } from './db.js';
+import { readEnv } from './env.js';
 import passport, { authRoutes } from './auth.js';
 import { logger, morganMiddleware } from './logger.js';
 
@@ -21,13 +22,19 @@ import walletRoutes from './wallet.js';
 dotenv.config();
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST']
-  }
-});
+const isVercel = process.env.VERCEL === '1';
+const server = isVercel ? null : http.createServer(app);
+const io = server
+  ? new Server(server, {
+      cors: {
+        origin: readEnv('FRONTEND_URL') || 'http://localhost:3000',
+        methods: ['GET', 'POST']
+      }
+    })
+  : null;
+
+// Required for secure cookies behind Vercel's proxy.
+app.set('trust proxy', 1);
 
 // Logging Middleware
 app.use(morganMiddleware);
@@ -44,8 +51,8 @@ app.use(cors({
 
 
 // Body parsers
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // Rate Limiting — generous for SPA with many parallel API calls
 const limiter = rateLimit({
@@ -58,7 +65,7 @@ app.use('/api/', limiter);
 
 // App Session
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'supersecret-session-key',
+  secret: readEnv('SESSION_SECRET') || 'supersecret-session-key',
   resave: false,
   saveUninitialized: false,
   store: new PrismaSessionStore(
@@ -69,7 +76,10 @@ app.use(session({
       dbRecordIdFunction: undefined,
     }
   ),
-  cookie: { secure: process.env.NODE_ENV === 'production' }
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+  }
 }));
 
 // Initialize Passport
@@ -91,16 +101,23 @@ app.use('/api/tasks', tasksRoutes);
 app.use('/api/mining', miningRoutes);
 app.use('/api/wallet', walletRoutes);
 
-// Socket.io basics
-io.on('connection', (socket) => {
-  logger.info(`User connected: ${socket.id}`);
-  socket.on('disconnect', () => {
-    logger.info(`User disconnected: ${socket.id}`);
-  });
+app.use((err: any, _req: any, res: any, _next: any) => {
+  logger.error('Unhandled server error:', err);
+  res.status(500).json({ error: err?.message || 'Internal server error' });
 });
 
+// Socket.io basics
+if (io) {
+  io.on('connection', (socket) => {
+    logger.info(`User connected: ${socket.id}`);
+    socket.on('disconnect', () => {
+      logger.info(`User disconnected: ${socket.id}`);
+    });
+  });
+}
+
 const PORT = process.env.PORT || 3001;
-if (process.env.VERCEL !== '1') {
+if (!isVercel && server) {
   server.listen(PORT, () => {
     logger.info(`Server is running on port ${PORT}`);
   });
