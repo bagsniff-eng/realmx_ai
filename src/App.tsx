@@ -3818,6 +3818,36 @@ const Profile = () => {
 
 const AuthGateScreen = ({ loading }: { loading: boolean }) => {
   const returnTo = encodeURIComponent(getDefaultAuthReturnTo());
+  const GoogleIcon = () => (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px]">
+      <path
+        fill="#4285F4"
+        d="M21.6 12.23c0-.68-.06-1.33-.17-1.95H12v3.69h5.39a4.62 4.62 0 0 1-2 3.03v2.51h3.24c1.9-1.75 2.97-4.33 2.97-7.28Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 22c2.7 0 4.96-.9 6.61-2.44l-3.24-2.51c-.9.61-2.04.97-3.37.97-2.59 0-4.79-1.75-5.57-4.1H3.09v2.58A9.99 9.99 0 0 0 12 22Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M6.43 13.92A5.98 5.98 0 0 1 6.12 12c0-.67.12-1.32.31-1.92V7.5H3.09a9.99 9.99 0 0 0 0 9l3.34-2.58Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.98c1.47 0 2.79.51 3.83 1.5l2.87-2.87C16.95 2.98 14.69 2 12 2A9.99 9.99 0 0 0 3.09 7.5l3.34 2.58c.78-2.35 2.98-4.1 5.57-4.1Z"
+      />
+    </svg>
+  );
+  const XIcon = () => (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[17px] w-[17px] fill-current">
+      <path d="M18.9 2H21l-4.59 5.24L22 22h-4.38l-3.43-4.48L10.27 22H8.16l4.91-5.6L2 2h4.5l3.1 4.09L13.1 2h2.11L11 6.82 18.9 2Z" />
+    </svg>
+  );
+  const DiscordIcon = () => (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] fill-current">
+      <path d="M20.32 4.37A17.4 17.4 0 0 0 16.03 3l-.21.42a16.2 16.2 0 0 1 3.96 1.9 12.93 12.93 0 0 0-3.91-1.81 13.73 13.73 0 0 0-7.74 0A12.9 12.9 0 0 0 4.2 5.32a16.14 16.14 0 0 1 3.96-1.9L7.95 3A17.34 17.34 0 0 0 3.66 4.37C.95 8.42.22 12.38.58 16.28a17.6 17.6 0 0 0 5.26 2.67l1.13-1.55c-.62-.23-1.22-.52-1.79-.87.15.11.3.22.46.32 2.56 1.78 5.34 1.78 7.9 0 .16-.1.31-.21.46-.32-.57.35-1.17.64-1.79.87l1.13 1.55a17.54 17.54 0 0 0 5.26-2.67c.43-4.52-.74-8.45-3.28-11.91ZM8.85 14.02c-.94 0-1.71-.86-1.71-1.92s.76-1.92 1.71-1.92c.95 0 1.72.87 1.71 1.92 0 1.06-.76 1.92-1.71 1.92Zm6.3 0c-.94 0-1.71-.86-1.71-1.92s.76-1.92 1.71-1.92c.95 0 1.72.87 1.71 1.92 0 1.06-.76 1.92-1.71 1.92Z" />
+    </svg>
+  );
 
   return (
     <div className="min-h-screen bg-realm-black text-white overflow-hidden">
@@ -3827,12 +3857,12 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
       </div>
 
       <div className="relative flex min-h-screen items-center justify-center px-5 py-8">
-        <div className="group w-full max-w-[280px] rounded-[24px] border border-white/10 bg-white/[0.03] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="group w-full max-w-[320px] rounded-[26px] border border-white/10 bg-white/[0.03] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           <div className="text-center">
             <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[9px] font-mono uppercase tracking-[0.22em] text-white/50">
               REALMxAI
             </div>
-            <h1 className="mt-3 text-[1.45rem] font-semibold tracking-tight text-white">
+            <h1 className="mt-3 text-[1.6rem] font-semibold tracking-tight text-white">
               Sign in
             </h1>
           </div>
@@ -3840,27 +3870,27 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
           <div className="mt-5">
             <a
               href={`/api/auth/google?returnTo=${returnTo}`}
-              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-realm-black transition-all hover:bg-realm-cyan"
+              className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-2xl bg-white px-4 text-sm font-semibold text-realm-black transition-all hover:bg-realm-cyan"
             >
-              <Mail size={16} />
+              <GoogleIcon />
               Continue
             </a>
           </div>
 
-          <div className="mt-2.5 flex items-center justify-center gap-2 opacity-100 transition-all duration-200 sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 sm:group-focus-within:translate-y-0 sm:group-focus-within:opacity-100">
+          <div className="mt-3 flex items-center justify-center gap-3 opacity-100 transition-all duration-200 sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 sm:group-focus-within:translate-y-0 sm:group-focus-within:opacity-100">
             <a
               href={`/api/auth/twitter?returnTo=${returnTo}`}
               aria-label="Continue with X"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
             >
-              <Link2 size={14} />
+              <XIcon />
             </a>
             <a
               href={`/api/auth/discord?returnTo=${returnTo}`}
               aria-label="Continue with Discord"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
             >
-              <ShieldCheck size={14} />
+              <DiscordIcon />
             </a>
           </div>
 
