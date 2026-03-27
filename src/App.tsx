@@ -3114,12 +3114,6 @@ const Profile = () => {
   ];
 
   const runProviderAction = async (provider: (typeof identityProviders)[number]) => {
-    if (provider.actionType === 'navigate') {
-      window.location.assign('/?tab=profile');
-      setProfileMessage({ type: 'error', text: 'Use the wallet control in the identity menu to attach your wallet.' });
-      return;
-    }
-
     if (provider.actionType === 'link') {
       window.location.assign(provider.href);
       return;
@@ -3336,20 +3330,25 @@ const Profile = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => void runProviderAction(provider)}
-                  disabled={provider.actionType === 'none'}
-                  className={cn(
-                    'rounded-xl px-4 py-2 text-sm font-semibold transition-all',
-                    provider.actionType === 'none'
-                      ? 'cursor-default border border-white/10 text-white/35'
-                      : provider.connected && provider.actionType !== 'logout'
-                        ? 'border border-red-400/20 text-red-300 hover:bg-red-400/10'
-                        : 'bg-white text-realm-black hover:bg-realm-cyan'
-                  )}
-                >
-                  {provider.actionLabel}
-                </button>
+                {provider.key === 'wallet' ? (
+                  <Suspense fallback={<div className="h-11 w-44 rounded-xl bg-white/5 animate-pulse" />}>
+                    <div className="[&_button]:min-w-[176px] [&_button]:justify-center [&_button]:rounded-xl [&_button]:border-0 [&_button]:bg-white [&_button]:px-4 [&_button]:py-2 [&_button]:text-sm [&_button]:font-semibold [&_button]:text-realm-black [&_button]:transition-colors hover:[&_button]:bg-realm-cyan">
+                      <ConnectButton />
+                    </div>
+                  </Suspense>
+                ) : (
+                  <button
+                    onClick={() => void runProviderAction(provider)}
+                    className={cn(
+                      'rounded-xl px-4 py-2 text-sm font-semibold transition-all',
+                      provider.connected && provider.actionType !== 'logout'
+                          ? 'border border-red-400/20 text-red-300 hover:bg-red-400/10'
+                          : 'bg-white text-realm-black hover:bg-realm-cyan'
+                    )}
+                  >
+                    {provider.actionLabel}
+                  </button>
+                )}
               </div>
             );
           })}
