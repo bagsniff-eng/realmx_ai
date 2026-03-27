@@ -3857,38 +3857,40 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
       </div>
 
       <div className="relative flex min-h-screen items-center justify-center px-5 py-8">
-        <div className="group w-full max-w-[320px] rounded-[26px] border border-white/10 bg-white/[0.03] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="w-full max-w-[380px] rounded-[30px] border border-white/10 bg-white/[0.03] p-7 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           <div className="text-center">
-            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[9px] font-mono uppercase tracking-[0.22em] text-white/50">
+            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.22em] text-white/50">
               REALMxAI
             </div>
-            <h1 className="mt-3 text-[1.6rem] font-semibold tracking-tight text-white">
+            <h1 className="mt-4 text-[1.85rem] font-semibold tracking-tight text-white">
               Sign in
             </h1>
           </div>
 
-          <div className="mt-5">
+          <div className="mt-6">
             <a
               href={`/api/auth/google?returnTo=${returnTo}`}
-              className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-2xl bg-white px-4 text-sm font-semibold text-realm-black transition-all hover:bg-realm-cyan"
+              className="flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-white px-5 text-base font-semibold text-realm-black transition-all hover:bg-realm-cyan"
             >
-              <GoogleIcon />
+              <span className="flex h-5 w-5 items-center justify-center">
+                <GoogleIcon />
+              </span>
               Continue
             </a>
           </div>
 
-          <div className="mt-3 flex items-center justify-center gap-3 opacity-100 transition-all duration-200 sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 sm:group-focus-within:translate-y-0 sm:group-focus-within:opacity-100">
+          <div className="mt-4 flex items-center justify-center gap-4">
             <a
               href={`/api/auth/twitter?returnTo=${returnTo}`}
               aria-label="Continue with X"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+              className="flex h-13 w-13 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
             >
               <XIcon />
             </a>
             <a
               href={`/api/auth/discord?returnTo=${returnTo}`}
               aria-label="Continue with Discord"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+              className="flex h-13 w-13 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
             >
               <DiscordIcon />
             </a>
