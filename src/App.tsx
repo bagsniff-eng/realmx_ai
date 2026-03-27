@@ -3862,18 +3862,18 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
             <a
               href={`/api/auth/twitter?returnTo=${returnTo}`}
               aria-label="Continue with X"
-              className="flex min-h-16 w-full items-center justify-between rounded-[24px] border border-white/12 bg-white/[0.06] px-5 text-white transition-all hover:-translate-y-0.5 hover:border-white/18 hover:bg-white/[0.09]"
+              className="flex min-h-16 w-full items-center justify-between rounded-[24px] border border-white/14 bg-white/[0.9] px-5 text-realm-black transition-all hover:-translate-y-0.5 hover:bg-white"
             >
               <span className="flex items-center gap-4">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.08] backdrop-blur-sm">
-                  <img src="/icons8-x-30.webp" alt="X" className="h-5 w-5 object-contain" />
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                  <img src="/icons8-x-30.webp" alt="X" className="h-6 w-6 object-contain" />
                 </span>
                 <span className="flex flex-col text-left">
-                  <span className="text-base font-semibold text-white">X</span>
-                  <span className="text-xs text-white/55">Connect with X</span>
+                  <span className="text-base font-semibold text-realm-black">X</span>
+                  <span className="text-xs text-realm-black/60">Connect with X</span>
                 </span>
               </span>
-              <span className="rounded-full border border-white/14 bg-white/[0.05] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/80">
+              <span className="rounded-full bg-realm-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white">
                 Connect
               </span>
             </a>
@@ -3881,18 +3881,18 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
             <a
               href={`/api/auth/discord?returnTo=${returnTo}`}
               aria-label="Continue with Discord"
-              className="flex min-h-16 w-full items-center justify-between rounded-[24px] border border-white/12 bg-white/[0.06] px-5 text-white transition-all hover:-translate-y-0.5 hover:border-white/18 hover:bg-white/[0.09]"
+              className="flex min-h-16 w-full items-center justify-between rounded-[24px] border border-white/14 bg-white/[0.9] px-5 text-realm-black transition-all hover:-translate-y-0.5 hover:bg-white"
             >
               <span className="flex items-center gap-4">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.08] backdrop-blur-sm">
-                  <img src="/icons8-discord-30.webp" alt="Discord" className="h-5 w-5 object-contain" />
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                  <img src="/icons8-discord-30.webp" alt="Discord" className="h-6 w-6 object-contain" />
                 </span>
                 <span className="flex flex-col text-left">
-                  <span className="text-base font-semibold text-white">Discord</span>
-                  <span className="text-xs text-white/55">Connect with Discord</span>
+                  <span className="text-base font-semibold text-realm-black">Discord</span>
+                  <span className="text-xs text-realm-black/60">Connect with Discord</span>
                 </span>
               </span>
-              <span className="rounded-full border border-white/14 bg-white/[0.05] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/80">
+              <span className="rounded-full bg-realm-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white">
                 Connect
               </span>
             </a>
