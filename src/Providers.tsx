@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+import { LoadingBreadcrumb } from '@/components/ui/animated-loading-svg-text-shimmer';
+
 const queryClient = new QueryClient();
 
 function ProviderStatusScreen({ title, description }: { title: string; description: string }) {
@@ -81,7 +83,12 @@ function WalletProviderWrapper({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-realm-black" />
+    <div className="min-h-screen bg-realm-black flex items-center justify-center px-6">
+      <LoadingBreadcrumb
+        text="Launching"
+        className="text-white [&_.shimmer-text]:!bg-[linear-gradient(90deg,rgba(255,255,255,0.35)_0%,rgba(255,255,255,0.35)_40%,rgba(61,242,224,1)_50%,rgba(255,255,255,0.35)_60%,rgba(255,255,255,0.35)_100%)]"
+      />
+    </div>
   );
 }
 
