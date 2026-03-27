@@ -90,6 +90,7 @@ export async function reconcileReferralRewards(
     where: {
       id: options.refereeId || undefined,
       referredById: options.referrerId ?? { not: null },
+      email: { not: null },
     },
     select: {
       id: true,

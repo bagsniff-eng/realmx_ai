@@ -169,7 +169,10 @@ router.get('/', async (req: any, res: any) => {
         where: { userId },
       }),
       prisma.user.count({
-        where: { referredById: userId },
+        where: {
+          referredById: userId,
+          email: { not: null },
+        },
       }),
       prisma.miningSession.count({
         where: {
@@ -219,7 +222,12 @@ router.post('/complete', isAuthenticated, async (req: any, res: any) => {
     const [user, existing, referralCount, minedTodayCount, minedSessionCount] = await Promise.all([
       prisma.user.findUnique({ where: { id: userId } }),
       prisma.taskCompletion.findFirst({ where: { userId, taskId } }),
-      prisma.user.count({ where: { referredById: userId } }),
+      prisma.user.count({
+        where: {
+          referredById: userId,
+          email: { not: null },
+        },
+      }),
       prisma.miningSession.count({
         where: {
           userId,

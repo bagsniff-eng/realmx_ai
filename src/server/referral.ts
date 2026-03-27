@@ -54,6 +54,9 @@ router.get('/', isAuthenticated, async (req: any, res: any) => {
       where: { id: userId },
       include: {
         referrals: {
+          where: {
+            email: { not: null },
+          },
           select: {
             id: true,
             email: true,
@@ -71,7 +74,13 @@ router.get('/', isAuthenticated, async (req: any, res: any) => {
           },
           orderBy: { createdAt: 'desc' },
         },
-        rewardsEarned: true,
+        rewardsEarned: {
+          where: {
+            referee: {
+              email: { not: null },
+            },
+          },
+        },
       },
     });
 
@@ -145,11 +154,15 @@ router.post(
 
       const currentUser = await prisma.user.findUnique({
         where: { id: targetUserId },
-        select: { id: true, referredById: true },
+        select: { id: true, referredById: true, email: true },
       });
 
       if (!currentUser) {
         return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (!currentUser.email) {
+        return res.status(400).json({ error: 'Referral codes can only be applied to email-connected accounts' });
       }
 
       if (currentUser.referredById) {
