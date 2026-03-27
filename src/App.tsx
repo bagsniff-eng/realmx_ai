@@ -7,6 +7,19 @@ type WalletConnectControlProps = {
   disconnectedLabel?: string;
 };
 
+type SessionUser = {
+  id?: string;
+  email?: string;
+  walletAddress?: string;
+  githubId?: string;
+  discordId?: string;
+  twitterId?: string;
+  referralCode?: string;
+  name?: string;
+  avatarUrl?: string;
+  username?: string;
+} | null;
+
 const WalletConnectControl = React.lazy(async () => {
   try {
     const rm = await import('@rainbow-me/rainbowkit');
@@ -295,6 +308,36 @@ function getProfileVisibilityLabel(visibility: AppPreferences['privacy']['profil
   return 'Trusted network';
 }
 
+function getDefaultAuthReturnTo() {
+  if (typeof window === 'undefined') return '/?tab=dashboard';
+  return `${window.location.pathname}${window.location.search || '?tab=dashboard'}`;
+}
+
+async function resolveCurrentSessionUser(): Promise<SessionUser> {
+  const attempts = [0, 250, 750];
+
+  for (const delay of attempts) {
+    if (delay > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, delay));
+    }
+
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      if (res.ok) {
+        return await res.json();
+      }
+
+      if (res.status === 401) {
+        return null;
+      }
+    } catch {
+      // Retry transient auth bootstrap failures before treating the session as missing.
+    }
+  }
+
+  return null;
+}
+
 function getConnectedIdentityCount(user: any) {
   return [
     user?.email || user?.walletAddress,
@@ -311,6 +354,16 @@ function getProfileChecks(user: any) {
     !!user?.avatarUrl,
     !!(user?.email || user?.walletAddress),
     getConnectedIdentityCount(user) >= 2,
+  ];
+}
+
+function getProfileSetupItems(user: any) {
+  return [
+    { label: 'Display name', complete: !!user?.name },
+    { label: 'Username', complete: !!user?.username },
+    { label: 'Profile photo', complete: !!user?.avatarUrl },
+    { label: 'Primary sign-in', complete: !!(user?.email || user?.walletAddress) },
+    { label: 'Backup identity', complete: getConnectedIdentityCount(user) >= 2 },
   ];
 }
 
@@ -821,10 +874,13 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
     const fetchUser = async () => {
       try {
         const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (res.ok) setUser(await res.json());
-        else setUser(null);
+        if (res.ok) {
+          setUser(await res.json());
+        } else if (res.status === 401) {
+          setUser(null);
+        }
       } catch (e) {
-        setUser(null);
+        // Keep the current user in memory on temporary network failures.
       }
     };
     const fetchTasks = async () => {
@@ -882,9 +938,9 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
   const remainingSecs = Math.max(0, SESSION_DURATION - sessionSecs);
   const sessionCompletion = Math.min(100, Math.round((sessionSecs / SESSION_DURATION) * 100));
   const connectedAccounts = getConnectedIdentityCount(user);
-  const profileChecks = getProfileChecks(user);
-  const completedProfileChecks = profileChecks.filter(Boolean).length;
-  const profileCheckTotal = profileChecks.length;
+  const profileSetupItems = getProfileSetupItems(user);
+  const completedProfileChecks = profileSetupItems.filter((item) => item.complete).length;
+  const profileCheckTotal = profileSetupItems.length;
   const completedTasks = tasks.filter((task) => task.completed).length;
   const readyTasks = tasks.filter((task) => !task.completed && task.eligible);
   const blockedTasks = tasks.filter((task) => !task.completed && !task.eligible);
@@ -905,8 +961,8 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           tone: 'muted',
         },
     {
-      title: completedProfileChecks === profileCheckTotal ? 'Identity checks complete' : 'Identity setup still missing items',
-      detail: `${completedProfileChecks}/${profileCheckTotal} profile checks are complete across handle, avatar, primary identity, and recovery.`,
+      title: completedProfileChecks === profileCheckTotal ? 'Profile setup complete' : 'Profile setup still needs work',
+      detail: `${completedProfileChecks}/${profileCheckTotal} setup steps are complete across name, username, photo, sign-in, and backup access.`,
       tone: completedProfileChecks === profileCheckTotal ? 'cyan' : 'amber',
     },
     {
@@ -928,8 +984,8 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
     },
     {
       label: 'Identity assurance',
-      value: `${completedProfileChecks}/${profileCheckTotal}`,
-      status: completedProfileChecks >= 4 ? 'Ready' : completedProfileChecks >= 2 ? 'In progress' : 'Needs work',
+    value: `${completedProfileChecks}/${profileCheckTotal}`,
+    status: completedProfileChecks >= 4 ? 'Ready' : completedProfileChecks >= 2 ? 'In progress' : 'Needs work',
     },
     {
       label: 'Trust links',
@@ -1508,7 +1564,7 @@ const TasksPageV2 = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
 
       if (userRes.ok) {
         setUser(await userRes.json());
-      } else {
+      } else if (userRes.status === 401) {
         setUser(null);
       }
     } catch (e) {
@@ -3252,9 +3308,9 @@ const Profile = () => {
   const completedTasks = tasks.filter((task) => task.completed).length;
   const completedSessions = history.filter((entry) => !entry.isActive && Number(entry.pointsEarned || 0) > 0);
   const identityLinks = user ? getConnectedIdentityCount(user) : 0;
-  const profileChecks = getProfileChecks(user);
-  const completedProfileChecks = profileChecks.filter(Boolean).length;
-  const profileCheckTotal = profileChecks.length;
+  const profileSetupItems = getProfileSetupItems(user);
+  const completedProfileChecks = profileSetupItems.filter((item) => item.complete).length;
+  const profileCheckTotal = profileSetupItems.length;
   const maskedWallet = maskWalletAddress(user?.walletAddress, preferences.privacy.maskWalletAddress);
   const disclosureLabel = getProfileVisibilityLabel(preferences.privacy.profileVisibility);
   const recoveryState = identityLinks >= 3 ? 'Strong recovery posture' : identityLinks >= 2 ? 'Recoverable' : 'Fragile';
@@ -3342,7 +3398,7 @@ const Profile = () => {
     {
       title: 'Profile basics are present',
       done: completedProfileChecks >= 4,
-      detail: `${completedProfileChecks}/${profileCheckTotal} profile checks are complete across name, avatar, handle, and recoverability.`,
+      detail: `${completedProfileChecks}/${profileCheckTotal} setup steps are complete across name, handle, photo, sign-in, and backup access.`,
     },
     {
       title: 'Security notifications are enabled',
@@ -3434,11 +3490,6 @@ const Profile = () => {
 
           <div className="border-t border-white/5 bg-white/[0.02] p-8 md:border-l md:border-t-0">
             <div className="space-y-5">
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Identity checks</p>
-                <p className="mt-3 text-4xl font-semibold text-realm-cyan">{completedProfileChecks}/{profileCheckTotal}</p>
-                <p className="mt-2 text-sm text-white/45">A simple count of what is already set up.</p>
-              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
                   <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Linked identities</p>
@@ -3494,7 +3545,7 @@ const Profile = () => {
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
-            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Identity checks</p>
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Profile setup</p>
             <p className="mt-4 text-2xl font-semibold text-white">{completedProfileChecks}/{profileCheckTotal}</p>
             <p className="mt-1 text-xs text-white/35">Name, handle, avatar, primary login, and recovery coverage</p>
           </div>
@@ -3765,8 +3816,81 @@ const Profile = () => {
   );
 };
 
+const AuthGateScreen = ({ loading }: { loading: boolean }) => {
+  const returnTo = encodeURIComponent(getDefaultAuthReturnTo());
 
-export default function App() {
+  return (
+    <div className="min-h-screen bg-realm-black text-white overflow-hidden">
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(61,242,224,0.12),transparent_38%),radial-gradient(circle_at_bottom,rgba(255,255,255,0.06),transparent_34%)]" />
+        <div className="absolute inset-0 grid-distortion opacity-20" />
+      </div>
+
+      <div className="relative flex min-h-screen items-center justify-center px-6 py-10">
+        <div className="w-full max-w-[560px] rounded-[32px] border border-white/10 bg-white/[0.03] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-10">
+          <div className="mx-auto max-w-[420px] text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-realm-cyan/20 bg-realm-cyan/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.22em] text-realm-cyan">
+              REALMxAI node access
+            </div>
+            <h1 className="mt-6 text-balance text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+              Sign in before the node dashboard loads
+            </h1>
+            <p className="mt-4 text-sm leading-6 text-white/55 sm:text-base">
+              Launch takes you into the app, but access stays gated until your identity is verified with X, Google, or your wallet.
+            </p>
+          </div>
+
+          <div className="mt-10 space-y-4">
+            <a
+              href={`/api/auth/google?returnTo=${returnTo}`}
+              className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-white/10 bg-white px-5 text-sm font-semibold text-realm-black transition-all hover:bg-realm-cyan"
+            >
+              <span className="flex items-center gap-3">
+                <Mail size={18} />
+                Continue with Google
+              </span>
+              <ArrowUpRight size={16} />
+            </a>
+
+            <a
+              href={`/api/auth/twitter?returnTo=${returnTo}`}
+              className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-white transition-all hover:border-white/20 hover:bg-white/[0.08]"
+            >
+              <span className="flex items-center gap-3">
+                <Link2 size={18} />
+                Continue with X
+              </span>
+              <ArrowUpRight size={16} className="text-white/50" />
+            </a>
+
+            <Suspense fallback={<div className="h-14 w-full animate-pulse rounded-2xl bg-white/[0.05]" />}>
+              <WalletConnectControl
+                className="w-full"
+                buttonClassName="w-full min-h-14 justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-white hover:border-white/20 hover:bg-white/[0.08]"
+                connectedButtonClassName="w-full min-h-14 justify-between rounded-2xl border border-realm-cyan/20 bg-realm-cyan/10 px-5 text-sm font-semibold text-realm-cyan"
+                disconnectedLabel="Continue with wallet"
+              />
+            </Suspense>
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-white/8 bg-black/20 p-4 text-sm text-white/45">
+            <p>Sessions stay active for at least 30 days unless you explicitly sign out.</p>
+            <p className="mt-2">Unauthenticated visitors stay on this screen, even if they open dashboard URLs directly.</p>
+          </div>
+
+          {loading && (
+            <div className="mt-6 text-center text-[11px] font-mono uppercase tracking-[0.2em] text-white/35">
+              Restoring session...
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+function AuthenticatedApp() {
   const [activeTab, setActiveTab] = useState(() => {
     const tab = new URLSearchParams(window.location.search).get('tab');
     const allowedTabs = new Set(['dashboard', 'leaderboard', 'node', 'mining', 'wallet', 'tasks', 'referrals', 'profile', 'settings']);
@@ -3991,7 +4115,7 @@ export default function App() {
       <TopBar onNavigate={(t) => setActiveTab(t)} />
 
       <main className="pl-0 md:pl-64 pt-20 min-h-screen">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 xl:px-10 xl:py-10">
+        <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8 xl:py-10">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -4025,4 +4149,58 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+export default function App() {
+  const [authUser, setAuthUser] = useState<SessionUser>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateAuth = async () => {
+      const user = await resolveCurrentSessionUser();
+      if (cancelled) return;
+      setAuthUser(user);
+      setAuthReady(true);
+    };
+
+    hydrateAuth();
+
+    const refreshAuth = () => {
+      void hydrateAuth();
+    };
+
+    window.addEventListener('focus', refreshAuth);
+    window.addEventListener('visibilitychange', refreshAuth);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', refreshAuth);
+      window.removeEventListener('visibilitychange', refreshAuth);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || authUser?.id) return;
+
+    const intervalId = window.setInterval(async () => {
+      const user = await resolveCurrentSessionUser();
+      if (user?.id) {
+        setAuthUser(user);
+      }
+    }, 2500);
+
+    return () => window.clearInterval(intervalId);
+  }, [authReady, authUser]);
+
+  if (!authReady) {
+    return <AuthGateScreen loading={true} />;
+  }
+
+  if (!authUser?.id) {
+    return <AuthGateScreen loading={false} />;
+  }
+
+  return <AuthenticatedApp />;
 }
