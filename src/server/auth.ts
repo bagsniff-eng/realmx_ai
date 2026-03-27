@@ -388,7 +388,12 @@ export const authRoutes = (app: any) => {
       if (!user) user = await createUserWithDefaults({ walletAddress: message.address });
       
       req.session.siwe = message;
-      req.session.cookie.expires = new Date(message.expirationTime!);
+      if (message.expirationTime) {
+        const expirationDate = new Date(message.expirationTime);
+        if (!Number.isNaN(expirationDate.getTime())) {
+          req.session.cookie.expires = expirationDate;
+        }
+      }
       req.session.save(() => {
         req.login(user, (err: any) => {
           if (err) return res.status(500).json({ error: err.message });
