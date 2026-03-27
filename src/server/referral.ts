@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { prisma } from './db.js';
 import { logger } from './logger.js';
+import { REFERRAL_SIGNUP_BONUS } from './referral-constants.js';
 
 const router = Router();
 
@@ -165,13 +166,13 @@ router.post(
           data: {
             referrerId: referrer.id,
             refereeId: targetUserId,
-            amount: 10,
+            amount: REFERRAL_SIGNUP_BONUS,
           },
         });
 
         await tx.user.update({
           where: { id: referrer.id },
-          data: { points: { increment: 10 } },
+          data: { points: { increment: REFERRAL_SIGNUP_BONUS } },
         });
       });
 

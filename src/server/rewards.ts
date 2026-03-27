@@ -1,6 +1,5 @@
 import { prisma } from './db.js';
-
-const REFERRAL_REWARD_RATE = 0.1;
+import { REFERRAL_REWARD_RATE } from './referral-constants.js';
 const POINT_PRECISION = 10000;
 
 function roundPoints(value: number) {
