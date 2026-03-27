@@ -388,15 +388,22 @@ export const authRoutes = (app: any) => {
       if (!user) user = await createUserWithDefaults({ walletAddress: message.address });
       
       req.session.siwe = message;
+      req.session.nonce = null;
       if (message.expirationTime) {
         const expirationDate = new Date(message.expirationTime);
         if (!Number.isNaN(expirationDate.getTime())) {
           req.session.cookie.expires = expirationDate;
         }
       }
-      req.session.save(() => {
-        req.login(user, (err: any) => {
-          if (err) return res.status(500).json({ error: err.message });
+
+      req.login(user, (err: any) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        req.session.save((saveErr: any) => {
+          if (saveErr) {
+            return res.status(500).json({ error: saveErr.message || 'Failed to persist login session' });
+          }
+
           res.status(200).json({ success: true, user: { id: user!.id, username: user!.username } });
         });
       });
