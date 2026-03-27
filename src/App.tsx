@@ -441,6 +441,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [topBarPoints, setTopBarPoints] = useState(0);
   const [notifications, setNotifications] = useState<{id: string; text: string; time: string; read: boolean}[]>([]);
+  const notificationsRef = React.useRef<HTMLDivElement>(null);
   const preferences = useAppPreferences();
 
   useEffect(() => {
@@ -501,6 +502,19 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
     return () => { clearInterval(t); window.removeEventListener('balance-updated', onBalanceUpdated); };
   }, [preferences.workspace.refreshIntervalMs]);
 
+  useEffect(() => {
+    if (!notificationsOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!notificationsRef.current?.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [notificationsOpen]);
+
   const isIdentityConnected = !!(user?.email || user?.walletAddress);
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -524,7 +538,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
           </span>
         </div>
         
-        <div className="relative">
+        <div ref={notificationsRef} className="relative">
           <button 
            onClick={() => { setNotificationsOpen(!notificationsOpen); if (!notificationsOpen) setNotifications(prev => prev.map(n => ({...n, read: true}))); }}
            className="p-2 text-realm-text-secondary hover:text-realm-text-primary transition-colors relative"
