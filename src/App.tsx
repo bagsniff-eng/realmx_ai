@@ -1,11 +1,95 @@
 import React, { useState, useEffect, Suspense } from 'react';
 
-const ConnectButton = React.lazy(async () => {
+type WalletConnectControlProps = {
+  className?: string;
+  buttonClassName?: string;
+  connectedButtonClassName?: string;
+  disconnectedLabel?: string;
+};
+
+const WalletConnectControl = React.lazy(async () => {
   try {
     const rm = await import('@rainbow-me/rainbowkit');
-    return { default: rm.ConnectButton as any };
+    const CustomConnect = ({
+      className,
+      buttonClassName,
+      connectedButtonClassName,
+      disconnectedLabel = 'Connect wallet',
+    }: WalletConnectControlProps) => (
+      <rm.ConnectButton.Custom>
+        {({ account, chain, authenticationStatus, mounted, openAccountModal, openChainModal, openConnectModal }) => {
+          const ready = mounted && authenticationStatus !== 'loading';
+          const connected = ready && Boolean(account) && Boolean(chain) && (!authenticationStatus || authenticationStatus === 'authenticated');
+
+          if (!connected) {
+            return (
+              <div className={className}>
+                <button
+                  type="button"
+                  onClick={openConnectModal}
+                  className={cn(
+                    'inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition-all hover:bg-realm-cyan',
+                    buttonClassName
+                  )}
+                >
+                  {disconnectedLabel}
+                </button>
+              </div>
+            );
+          }
+
+          if (chain.unsupported) {
+            return (
+              <div className={className}>
+                <button
+                  type="button"
+                  onClick={openChainModal}
+                  className={cn(
+                    'inline-flex min-h-11 items-center justify-center rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-semibold text-red-200 transition-all hover:bg-red-400/15',
+                    connectedButtonClassName
+                  )}
+                >
+                  Unsupported network
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <div className={className}>
+              <button
+                type="button"
+                onClick={openAccountModal}
+                className={cn(
+                  'inline-flex min-h-11 items-center gap-3 rounded-xl border border-realm-cyan/20 bg-realm-cyan/10 px-4 py-2 text-left text-sm font-semibold text-realm-cyan transition-all hover:bg-realm-cyan/15',
+                  connectedButtonClassName
+                )}
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-realm-cyan shadow-[0_0_10px_rgba(61,242,224,0.45)]" />
+                <span className="flex flex-col">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-realm-cyan/70">
+                    {chain.name}
+                  </span>
+                  <span className="text-sm text-realm-cyan">{account.displayName}</span>
+                </span>
+              </button>
+            </div>
+          );
+        }}
+      </rm.ConnectButton.Custom>
+    );
+
+    return { default: CustomConnect as any };
   } catch (err) {
-    return { default: (() => <button className="px-4 py-2 bg-red-900/50 text-red-200 text-xs rounded border border-red-500/50">Wallet Unavailable</button>) as any };
+    return {
+      default: (({ className }: WalletConnectControlProps) => (
+        <div className={className}>
+          <button className="inline-flex min-h-11 items-center justify-center rounded-xl border border-red-500/50 bg-red-900/50 px-4 py-2 text-xs font-semibold text-red-200">
+            Wallet unavailable
+          </button>
+        </div>
+      )) as any
+    };
   }
 });
 
@@ -486,7 +570,7 @@ const TopBar = ({ onNavigate }: { onNavigate: (tab: string) => void }) => {
             {/* Wallet Connect */}
             <div className="mb-3">
               <Suspense fallback={<div className="h-10 w-full bg-white/5 animate-pulse rounded-lg" />}>
-                <ConnectButton />
+                <WalletConnectControl className="w-full" buttonClassName="w-full" connectedButtonClassName="w-full" />
               </Suspense>
             </div>
 
@@ -3332,9 +3416,11 @@ const Profile = () => {
 
                 {provider.key === 'wallet' ? (
                   <Suspense fallback={<div className="h-11 w-44 rounded-xl bg-white/5 animate-pulse" />}>
-                    <div className="[&_button]:min-w-[176px] [&_button]:justify-center [&_button]:rounded-xl [&_button]:border-0 [&_button]:bg-white [&_button]:px-4 [&_button]:py-2 [&_button]:text-sm [&_button]:font-semibold [&_button]:text-realm-black [&_button]:transition-colors hover:[&_button]:bg-realm-cyan">
-                      <ConnectButton />
-                    </div>
+                    <WalletConnectControl
+                      className="w-full md:w-auto"
+                      buttonClassName="w-full md:w-auto"
+                      connectedButtonClassName="w-full justify-center md:w-auto"
+                    />
                   </Suspense>
                 ) : (
                   <button
