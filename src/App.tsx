@@ -45,6 +45,55 @@ type SessionUser = {
   username?: string;
 } | null;
 
+type UploadedSmoothScrollInstance = {
+  addItems?: () => UploadedSmoothScrollInstance;
+};
+
+type UploadedSmoothScrollConstructor = new (options: {
+  target: HTMLElement;
+  scrollEase?: number;
+  maxOffset?: number;
+}) => UploadedSmoothScrollInstance;
+
+let uploadedSmoothScrollPromise: Promise<UploadedSmoothScrollConstructor | null> | null = null;
+
+function loadUploadedSmoothScroll(): Promise<UploadedSmoothScrollConstructor | null> {
+  if (typeof window === 'undefined') {
+    return Promise.resolve(null);
+  }
+
+  const smoothScrollWindow = window as typeof window & {
+    SmoothScroll?: UploadedSmoothScrollConstructor;
+  };
+
+  if (smoothScrollWindow.SmoothScroll) {
+    return Promise.resolve(smoothScrollWindow.SmoothScroll);
+  }
+
+  if (uploadedSmoothScrollPromise) {
+    return uploadedSmoothScrollPromise;
+  }
+
+  uploadedSmoothScrollPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>('script[data-uploaded-smooth-scroll="true"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(smoothScrollWindow.SmoothScroll ?? null), { once: true });
+      existingScript.addEventListener('error', () => reject(new Error('Failed to load uploaded smooth scroll script.')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = '/SmoothScroll-main/js/SmoothScroll.min.js';
+    script.async = true;
+    script.dataset.uploadedSmoothScroll = 'true';
+    script.onload = () => resolve(smoothScrollWindow.SmoothScroll ?? null);
+    script.onerror = () => reject(new Error('Failed to load uploaded smooth scroll script.'));
+    document.head.appendChild(script);
+  });
+
+  return uploadedSmoothScrollPromise;
+}
+
 const WalletConnectControl = React.lazy(async () => {
   try {
     const rm = await import('@rainbow-me/rainbowkit');
@@ -4224,6 +4273,10 @@ function AuthenticatedApp() {
   const [miningActive, setMiningActive] = useState<boolean>(() => isSessionActive());
   const [sessionSecs, setSessionSecs] = useState<number>(() => getSessionElapsed());
   const [parallaxOffset, setParallaxOffset] = useState(0);
+  const [smoothScrollReady, setSmoothScrollReady] = useState(false);
+  const smoothScrollViewportRef = useRef<HTMLDivElement>(null);
+  const smoothScrollContainerRef = useRef<HTMLElement>(null);
+  const smoothScrollEnabledRef = useRef(false);
 
   useEffect(() => {
     const pendingReferralCode = getPendingReferralCode();
@@ -4386,6 +4439,72 @@ function AuthenticatedApp() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    const viewport = smoothScrollViewportRef.current;
+    const container = smoothScrollContainerRef.current;
+    if (!viewport || !container) return;
+
+    const mediaQuery = window.matchMedia('(max-width: 767px), (prefers-reduced-motion: reduce)');
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (mediaQuery.matches || isTouchDevice) {
+      smoothScrollEnabledRef.current = false;
+      setSmoothScrollReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
+
+    const activateSmoothScroll = async () => {
+      try {
+        const SmoothScroll = await loadUploadedSmoothScroll();
+        if (cancelled || !SmoothScroll) return;
+
+        smoothScrollEnabledRef.current = true;
+        setSmoothScrollReady(true);
+
+        const instance = new SmoothScroll({
+          target: container,
+          scrollEase: 0.08,
+          maxOffset: 220,
+        });
+
+        instance.addItems?.();
+        window.dispatchEvent(new Event('resize'));
+
+        resizeObserver = new ResizeObserver(() => {
+          window.dispatchEvent(new Event('resize'));
+        });
+        resizeObserver.observe(container);
+      } catch (error) {
+        console.error('[REALMxAI] Failed to enable uploaded smooth scroll:', error);
+      }
+    };
+
+    void activateSmoothScroll();
+
+    return () => {
+      cancelled = true;
+      resizeObserver?.disconnect();
+      smoothScrollEnabledRef.current = false;
+      setSmoothScrollReady(false);
+      container.style.transform = '';
+      document.body.style.height = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!smoothScrollEnabledRef.current || typeof window === 'undefined') return;
+
+    const rafId = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const mediaQuery = window.matchMedia('(max-width: 767px), (prefers-reduced-motion: reduce)');
     let rafId = 0;
 
@@ -4506,29 +4625,37 @@ function AuthenticatedApp() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <TopBar onNavigate={(t) => setActiveTab(t)} />
 
-      <main className="pl-0 md:pl-64 pt-20 min-h-screen">
-        <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8 xl:py-10">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-            >
-              {activeTab === 'dashboard' && <Dashboard miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} onNavigate={(t) => setActiveTab(t)} />}
-              {activeTab === 'leaderboard' && <Leaderboard />}
-              {activeTab === 'node' && <NodePage />}
-              {activeTab === 'mining' && <MiningPage miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} />}
-              {activeTab === 'wallet' && <WalletPage />}
-              {activeTab === 'tasks' && <TasksPageV2 onNavigate={(t) => setActiveTab(t)} />}
-              {activeTab === 'referrals' && <ReferralsPage />}
-              {activeTab === 'profile' && <Profile />}
-              {activeTab === 'settings' && <SettingsPage />}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </main>
+      <div
+        ref={smoothScrollViewportRef}
+        className={smoothScrollReady ? 'fixed inset-0 overflow-hidden' : undefined}
+      >
+        <main
+          ref={smoothScrollContainerRef}
+          className={`pl-0 md:pl-64 pt-20 min-h-screen ${smoothScrollReady ? 'w-full' : ''}`}
+        >
+          <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8 xl:py-10">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                {activeTab === 'dashboard' && <Dashboard miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} onNavigate={(t) => setActiveTab(t)} />}
+                {activeTab === 'leaderboard' && <Leaderboard />}
+                {activeTab === 'node' && <NodePage />}
+                {activeTab === 'mining' && <MiningPage miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} />}
+                {activeTab === 'wallet' && <WalletPage />}
+                {activeTab === 'tasks' && <TasksPageV2 onNavigate={(t) => setActiveTab(t)} />}
+                {activeTab === 'referrals' && <ReferralsPage />}
+                {activeTab === 'profile' && <Profile />}
+                {activeTab === 'settings' && <SettingsPage />}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </main>
+      </div>
 
       {/* Cinematic Grain Overlay */}
       <div className="fixed inset-0 pointer-events-none z-[100] opacity-[0.03] mix-blend-overlay">
