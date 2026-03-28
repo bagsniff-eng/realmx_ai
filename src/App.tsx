@@ -4249,6 +4249,25 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
                 Connect
               </span>
             </a>
+
+            <a
+              href={`/api/auth/github?returnTo=${returnTo}`}
+              aria-label="Continue with GitHub"
+              className="flex min-h-16 w-full items-center justify-between rounded-[24px] border border-white/14 bg-white/[0.9] px-5 text-realm-black transition-all hover:-translate-y-0.5 hover:bg-white"
+            >
+              <span className="flex items-center gap-4">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                  <img src="/icons8-github-48.png" alt="GitHub" className="h-6 w-6 object-contain" />
+                </span>
+                <span className="flex flex-col text-left">
+                  <span className="text-base font-semibold text-realm-black">GitHub</span>
+                  <span className="text-xs text-realm-black/60">Connect with GitHub</span>
+                </span>
+              </span>
+              <span className="rounded-full bg-realm-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white">
+                Connect
+              </span>
+            </a>
           </div>
 
           {loading && (
