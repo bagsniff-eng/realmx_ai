@@ -4223,6 +4223,7 @@ function AuthenticatedApp() {
   // ---- Shared Mining Session State ----
   const [miningActive, setMiningActive] = useState<boolean>(() => isSessionActive());
   const [sessionSecs, setSessionSecs] = useState<number>(() => getSessionElapsed());
+  const [parallaxOffset, setParallaxOffset] = useState(0);
 
   useEffect(() => {
     const pendingReferralCode = getPendingReferralCode();
@@ -4382,6 +4383,61 @@ function AuthenticatedApp() {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [activeTab]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const mediaQuery = window.matchMedia('(max-width: 767px), (prefers-reduced-motion: reduce)');
+    let rafId = 0;
+
+    const updateOffset = () => {
+      if (mediaQuery.matches) {
+        setParallaxOffset(0);
+        return;
+      }
+
+      setParallaxOffset(window.scrollY || window.pageYOffset || 0);
+    };
+
+    const handleScroll = () => {
+      if (rafId) return;
+
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        updateOffset();
+      });
+    };
+
+    const handleMediaChange = () => {
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      updateOffset();
+    };
+
+    updateOffset();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleMediaChange);
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleMediaChange);
+    } else {
+      mediaQuery.addListener(handleMediaChange);
+    }
+
+    return () => {
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleMediaChange);
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handleMediaChange);
+      } else {
+        mediaQuery.removeListener(handleMediaChange);
+      }
+    };
+  }, []);
+
 
   const handleMiningAction = async () => {
     if (miningActive) {
@@ -4431,7 +4487,19 @@ function AuthenticatedApp() {
   return (
     <div className="min-h-screen bg-realm-black selection:bg-realm-cyan selection:text-realm-black overflow-x-hidden">
       {/* Background Effects */}
-      <div className="fixed inset-0 pointer-events-none">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div
+          className="absolute -top-32 right-[4%] h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(47,230,210,0.14)_0%,rgba(47,230,210,0.07)_32%,transparent_72%)] blur-3xl will-change-transform"
+          style={{ transform: `translate3d(0, ${Math.round(parallaxOffset * 0.14)}px, 0)` }}
+        />
+        <div
+          className="absolute left-[-9rem] top-[28%] h-[22rem] w-[22rem] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.10)_0%,rgba(255,255,255,0.03)_36%,transparent_72%)] blur-3xl will-change-transform"
+          style={{ transform: `translate3d(0, ${Math.round(parallaxOffset * -0.08)}px, 0)` }}
+        />
+        <div
+          className="absolute inset-x-0 top-0 h-64 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent)] will-change-transform"
+          style={{ transform: `translate3d(0, ${Math.round(parallaxOffset * 0.05)}px, 0)` }}
+        />
         <div className="absolute inset-0 grid-distortion opacity-20" />
       </div>
 
