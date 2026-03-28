@@ -245,6 +245,7 @@ const TWITTER_SCOPES = ['tweet.read', 'users.read'];
 const TWITTER_AUTH_URL = 'https://x.com/i/oauth2/authorize';
 const TWITTER_TOKEN_URL = 'https://api.twitter.com/2/oauth2/token';
 const TWITTER_ME_URL = 'https://api.twitter.com/2/users/me?user.fields=id,username,name';
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 
 // Wallet Authentication (SIWE) routes helper
@@ -384,8 +385,22 @@ export const authRoutes = (app: any) => {
       const SIWEObject = new SiweMessage(req.body.message);
       const { data: message } = await SIWEObject.verify({ signature: req.body.signature, nonce: req.session.nonce });
 
-      let user = await prisma.user.findUnique({ where: { walletAddress: message.address } });
-      if (!user) user = await createUserWithDefaults({ walletAddress: message.address });
+      const currentUser = req.user as any;
+      const existingWalletUser = await prisma.user.findUnique({ where: { walletAddress: message.address } });
+      let user = existingWalletUser;
+
+      if (currentUser?.id) {
+        if (existingWalletUser && existingWalletUser.id !== currentUser.id) {
+          return res.status(409).json({ error: 'This wallet is already linked to another REALMxAI account.' });
+        }
+
+        user = await prisma.user.update({
+          where: { id: currentUser.id },
+          data: { walletAddress: message.address },
+        });
+      } else if (!user) {
+        user = await createUserWithDefaults({ walletAddress: message.address });
+      }
       
       req.session.siwe = message;
       req.session.nonce = null;
@@ -418,6 +433,10 @@ export const authRoutes = (app: any) => {
   app.get('/api/auth/me', (req: any, res: any) => {
     if (!req.user) {
       return res.status(401).json({ message: 'You are not authenticated' });
+    }
+    if (req.session) {
+      req.session.cookie.maxAge = SESSION_MAX_AGE_MS;
+      req.session.touch();
     }
     res.status(200).json(req.user);
   });
