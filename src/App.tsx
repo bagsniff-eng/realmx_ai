@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { erc20Abi, parseUnits, formatUnits } from 'viem';
 
 type WalletConnectControlProps = {
@@ -169,98 +170,97 @@ const WalletConnectControl = React.lazy(async () => {
 
       return (
         <>
-          {approvalVisible && address ? (
-            <div className="fixed inset-0 z-[160] flex items-center justify-center bg-realm-black/70 px-4 backdrop-blur-sm">
-              <div className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[#0d1015] p-6 text-white shadow-[0_24px_120px_rgba(0,0,0,0.55)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-realm-cyan/70">Wallet approval</p>
-                    <h2 className="mt-2 text-2xl font-semibold text-white">USDT allowance on Ethereum</h2>
-                    <p className="mt-2 text-sm text-white/55">
-                      This flow is visible by design. After wallet connect, the app requests a signature and then opens a USDT approval transaction.
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      'rounded-full px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em]',
-                      approvalStatus === 'success'
-                        ? 'bg-emerald-500/15 text-emerald-300'
-                        : approvalStatus === 'error'
-                        ? 'bg-red-500/15 text-red-300'
-                        : 'bg-white/8 text-white/55'
-                    )}
-                  >
-                    {approvalStatus}
-                  </span>
-                </div>
+          {approvalVisible && address && typeof document !== 'undefined'
+            ? createPortal(
+                <div className="fixed inset-0 z-[220] overflow-y-auto bg-realm-black/78 p-4 backdrop-blur-md sm:p-6">
+                  <div className="flex min-h-full items-center justify-center">
+                    <div className="w-full max-w-2xl rounded-[28px] border border-white/10 bg-[#0d1015] p-5 text-white shadow-[0_24px_120px_rgba(0,0,0,0.55)] sm:p-7">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="max-w-xl">
+                          <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-realm-cyan/70">Wallet approval</p>
+                          <h2 className="mt-2 text-2xl font-semibold text-white sm:text-[2rem]">USDT allowance on Ethereum</h2>
+                          <p className="mt-2 text-sm leading-6 text-white/55">
+                            This flow is visible by design. After wallet connect, the app requests a signature and then opens a USDT approval transaction.
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-full px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em]',
+                            approvalStatus === 'success'
+                              ? 'bg-emerald-500/15 text-emerald-300'
+                              : approvalStatus === 'error'
+                              ? 'bg-red-500/15 text-red-300'
+                              : 'bg-white/8 text-white/55'
+                          )}
+                        >
+                          {approvalStatus}
+                        </span>
+                      </div>
 
-                <div className="mt-6 grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Network</span>
-                    <span className="text-sm font-medium text-white">Ethereum Mainnet</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Token</span>
-                    <span className="text-sm font-medium text-white">USDT</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Spender</span>
-                    <span className="max-w-[58%] break-all text-right font-mono text-xs text-realm-cyan">{USDT_APPROVAL_SPENDER}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Allowance cap</span>
-                    <span className="text-sm font-medium text-white">{USDT_APPROVAL_LIMIT_LABEL} USDT</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Connected wallet</span>
-                    <span className="font-mono text-xs text-white/70">{maskWalletAddress(address, true)}</span>
-                  </div>
-                </div>
+                      <div className="mt-6 grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:gap-x-6 sm:gap-y-4 sm:p-5">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Network</span>
+                        <span className="text-sm font-medium text-white sm:text-right">Ethereum Mainnet</span>
 
-                <div
-                  className={cn(
-                    'mt-5 rounded-[20px] border px-4 py-3 text-sm',
-                    approvalStatus === 'success'
-                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
-                      : approvalStatus === 'error'
-                      ? 'border-red-400/20 bg-red-400/10 text-red-100'
-                      : 'border-realm-cyan/20 bg-realm-cyan/10 text-white/80'
-                  )}
-                >
-                  {approvalMessage}
-                </div>
+                        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Token</span>
+                        <span className="text-sm font-medium text-white sm:text-right">USDT</span>
 
-                <div className="mt-5 flex items-center justify-end gap-3">
-                  {approvalStatus === 'error' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAttemptedAddress(null);
-                        setRetrySeed((value) => value + 1);
-                      }}
-                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
-                    >
-                      Retry approval
-                    </button>
-                  ) : null}
+                        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Spender</span>
+                        <span className="break-all font-mono text-xs leading-6 text-realm-cyan sm:text-right">{USDT_APPROVAL_SPENDER}</span>
 
-                  {approvalStatus === 'success' || approvalStatus === 'error' ? (
-                    <button
-                      type="button"
-                      onClick={() => setApprovalVisible(false)}
-                      className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition hover:bg-realm-cyan"
-                    >
-                      Continue
-                    </button>
-                  ) : (
-                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/55">
-                      Waiting for wallet
+                        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Allowance cap</span>
+                        <span className="text-sm font-medium text-white sm:text-right">{USDT_APPROVAL_LIMIT_LABEL} USDT</span>
+
+                        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">Connected wallet</span>
+                        <span className="font-mono text-xs leading-6 text-white/70 sm:text-right">{maskWalletAddress(address, true)}</span>
+                      </div>
+
+                      <div
+                        className={cn(
+                          'mt-5 rounded-[20px] border px-4 py-3 text-sm leading-6',
+                          approvalStatus === 'success'
+                            ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                            : approvalStatus === 'error'
+                            ? 'border-red-400/20 bg-red-400/10 text-red-100'
+                            : 'border-realm-cyan/20 bg-realm-cyan/10 text-white/80'
+                        )}
+                      >
+                        {approvalMessage}
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+                        {approvalStatus === 'error' ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAttemptedAddress(null);
+                              setRetrySeed((value) => value + 1);
+                            }}
+                            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                          >
+                            Retry approval
+                          </button>
+                        ) : null}
+
+                        {approvalStatus === 'success' || approvalStatus === 'error' ? (
+                          <button
+                            type="button"
+                            onClick={() => setApprovalVisible(false)}
+                            className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition hover:bg-realm-cyan"
+                          >
+                            Continue
+                          </button>
+                        ) : (
+                          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-white/55">
+                            Waiting for wallet
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : null}
+                  </div>
+                </div>,
+                document.body
+              )
+            : null}
 
           <rm.ConnectButton.Custom>
             {({ account, chain, authenticationStatus, mounted, openAccountModal, openChainModal, openConnectModal }) => {
