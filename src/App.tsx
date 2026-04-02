@@ -1397,47 +1397,54 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
             : 'Guest node';
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8 lg:space-y-10">
       {/* Hero Section - Munich font for main title */}
-      <section className="p-8 rounded-lg bg-realm-surface border border-realm-border">
+      <section className="glass-panel relative overflow-hidden p-8">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(139,233,221,0.12),transparent_22%),linear-gradient(135deg,rgba(255,255,255,0.02),transparent_55%)]" />
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
+          className="relative"
         >
-          <p className="text-[10px] font-mono text-realm-text-secondary tracking-[0.25em] uppercase mb-3">Your node at a glance</p>
-          <h1 className="font-serif italic text-5xl text-white mb-5 leading-none tracking-tight">
-            Your node, <span className="text-realm-cyan">live</span>
+          <p className="mb-3 text-[10px] font-mono uppercase tracking-[0.28em] text-white/40">Node command surface</p>
+          <h1 className="mb-5 max-w-3xl text-serif text-4xl font-medium leading-[0.96] text-white sm:text-5xl">
+            Your node, <span className="text-realm-cyan">clearer</span> and under control
           </h1>
-          <div className="flex items-center gap-6">
+          <p className="mb-6 max-w-2xl text-sm leading-6 text-white/48">
+            A quieter operating view for contribution, reward pacing, and account readiness without the extra visual noise.
+          </p>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-realm-cyan status-pulse" />
-              <span className="text-[10px] font-mono text-realm-text-secondary uppercase tracking-widest">{operatorLabel} | {miningActive ? 'ACTIVE' : 'STANDBY'}</span>
+              <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/55">{operatorLabel} | {miningActive ? 'ACTIVE' : 'STANDBY'}</span>
             </div>
-            <span className="text-[10px] font-mono text-white/20 uppercase tracking-widest">{connectedAccounts}/4 IDENTITIES LINKED</span>
+            <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/28">{connectedAccounts}/4 IDENTITIES LINKED</span>
+            <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/28">{readyTasks.length} ACTIONS READY</span>
           </div>
         </motion.div>
       </section>
 
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-12 gap-5">
         {/* Mining Status Card - Redesigned like competitor image */}
         <motion.div 
-          className="col-span-12 lg:col-span-8 glass-panel p-8 relative group"
-          whileHover={{ borderColor: 'rgba(61,242,224,0.2)' }}
+          className="col-span-12 lg:col-span-8 glass-panel relative p-8"
+          whileHover={{ borderColor: 'rgba(139,233,221,0.18)' }}
         >
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="space-y-6 flex-1 w-full">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-md bg-white/[0.04] flex items-center justify-center text-realm-cyan border border-realm-border">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-realm-cyan">
                   <Pickaxe size={18} />
                 </div>
                 <div>
-                   <h3 className="font-bold text-white text-lg">Active Mining Session</h3>
-                   <p className="text-xs text-white/40">Start a session and keep your node earning.</p>
+                   <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/32">Mining command</p>
+                   <h3 className="mt-2 text-xl font-semibold text-white">Active mining session</h3>
+                   <p className="mt-1 text-sm text-white/42">Start a session and keep your node earning.</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-6 pt-2">
+              <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-3">
                 <div>
                    <p className="text-[10px] text-white/30 font-mono uppercase tracking-widest mb-1">Time Elapsed</p>
                    <p className="text-xl font-mono text-white">{fTime(sessionSecs)}</p>
@@ -1454,13 +1461,13 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
                 </div>
               </div>
 
-              <div className="pt-4 flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4 border-t border-white/8 pt-5">
                 <button 
                   onClick={onToggleMining}
                   className={cn(
-                    "px-8 py-3 rounded-md font-bold text-xs tracking-wide transition-all duration-150",
+                    "rounded-xl px-7 py-3 text-sm font-semibold transition-all duration-150",
                     miningActive 
-                      ? "border border-red-500/20 text-red-400 hover:bg-red-500/10" 
+                      ? "border border-red-500/20 bg-red-500/[0.05] text-red-300 hover:bg-red-500/10" 
                       : "bg-realm-cyan text-realm-black hover:brightness-105"
                   )}
                 >
@@ -1475,14 +1482,14 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
               </div>
             </div>
 
-            <div className="relative w-48 h-48 flex items-center justify-center shrink-0">
+            <div className="relative flex h-48 w-48 shrink-0 items-center justify-center">
                <svg className="w-full h-full transform -rotate-90">
                  <circle cx="96" cy="96" r="82" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-white/5" />
-                 <motion.circle 
+                 <motion.circle
                     cx="96" cy="96" r="82" stroke="currentColor" strokeWidth="4" fill="transparent"
                     strokeDasharray="515"
                     animate={{ strokeDashoffset: 515 * (1 - sessionSecs / SESSION_DURATION) }}
-                    className="text-realm-cyan shadow-lg"
+                    className="text-realm-cyan"
                  />
                </svg>
                <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -1495,7 +1502,7 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
 
         {/* Balance Card - Munich font for the number */}
         <motion.div 
-          className="col-span-12 lg:col-span-4 glass-panel p-8 flex flex-col justify-between overflow-hidden"
+          className="col-span-12 lg:col-span-4 glass-panel flex flex-col justify-between overflow-hidden p-8"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, delay: 0.05 }}
@@ -1505,23 +1512,23 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
               <div className="w-5 h-5 rounded bg-white/5 flex items-center justify-center border border-white/10">
                 <Wallet size={12} className="text-white/40" />
               </div>
-              <p className="text-[10px] text-white/40 font-mono uppercase tracking-widest">Total Balance</p>
+              <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-white/35">Total Balance</p>
             </div>
             
             <div className="space-y-1">
-              <h2 className="font-munich text-6xl text-white tracking-widest">
+              <h2 className="font-munich text-5xl text-white sm:text-6xl">
                 {points.toFixed(2)}
               </h2>
-              <p className="text-realm-cyan font-mono text-xs opacity-80">REALM ASSETS</p>
+              <p className="text-xs font-mono uppercase tracking-[0.22em] text-realm-cyan/80">Realm assets</p>
             </div>
           </div>
           
-          <div className="pt-10 space-y-4">
+          <div className="space-y-4 pt-10">
              <div className="flex justify-between items-center text-[10px] font-mono">
                <span className="text-white/30 uppercase">Mining Rate</span>
                <span className="text-realm-cyan">+{MINING_RATE_PER_HOUR}/hr</span>
              </div>
-             <button onClick={() => onNavigate('wallet')} className="w-full py-2.5 border border-realm-border rounded-md text-[10px] font-mono font-bold text-realm-text-secondary uppercase tracking-widest hover:border-white/15 hover:text-realm-text-primary transition-colors">
+             <button onClick={() => onNavigate('wallet')} className="w-full rounded-xl border border-white/10 py-3 text-[10px] font-mono font-bold uppercase tracking-[0.22em] text-realm-text-secondary hover:border-white/15 hover:text-realm-text-primary transition-colors">
                 Manage Wallet
              </button>
           </div>
@@ -1531,14 +1538,14 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Operator Snapshot</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">What is happening right now</h3>
-              <p className="mt-2 max-w-xl text-sm text-white/40">
+              <h3 className="mt-3 text-2xl font-semibold text-white">What needs attention now</h3>
+              <p className="mt-2 max-w-xl text-sm text-white/45">
                 A quick read on your session, identity setup, and rewards.
               </p>
             </div>
-            <div className="rounded-2xl border border-realm-cyan/20 bg-realm-cyan/10 px-4 py-3 text-right">
-              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-realm-cyan/70">Open tasks</p>
-              <p className="mt-2 text-3xl font-semibold text-realm-cyan">{readyTasks.length}</p>
+            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-right">
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Open tasks</p>
+              <p className="mt-2 text-3xl font-semibold text-white">{readyTasks.length}</p>
             </div>
           </div>
 
@@ -1570,9 +1577,9 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Reward Forecast</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">What you can expect to earn</h3>
+              <h3 className="mt-3 text-2xl font-semibold text-white">Expected payout window</h3>
             </div>
-            <Zap size={18} className="text-realm-cyan" />
+            <Zap size={18} className="text-realm-cyan/70" />
           </div>
 
           <div className="mt-8 space-y-4">
@@ -1597,7 +1604,7 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
               </div>
             </div>
 
-            <button onClick={() => onNavigate('mining')} className="w-full rounded-xl border border-realm-cyan/20 bg-realm-cyan/10 px-4 py-3 text-left text-sm text-realm-cyan hover:border-realm-cyan/35">
+            <button onClick={() => onNavigate('mining')} className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-white/78 hover:border-realm-cyan/25 hover:text-white">
               Open mining controls
             </button>
           </div>
@@ -1607,8 +1614,8 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
         <div className="col-span-12 glass-panel p-8">
            <div className="flex justify-between items-end mb-8">
              <div>
-               <h3 className="font-bold text-xl mb-1">Network activity</h3>
-               <p className="text-xs text-white/30">A simple view of your place in the network.</p>
+               <h3 className="mb-1 text-xl font-semibold text-white">Network activity</h3>
+               <p className="text-xs text-white/34">A calmer read on your place in the network.</p>
              </div>
              <div className="flex gap-2">
                {['24H', '7D', 'ALL'].map(t => (
@@ -1618,8 +1625,8 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
                    className={cn(
                      "px-3 py-1 rounded-md border text-[10px] font-mono transition-all",
                      timeframe === t 
-                       ? "bg-realm-cyan/20 border-realm-cyan text-realm-cyan" 
-                       : "bg-white/5 border-white/10 text-white/40 hover:text-white"
+                        ? "bg-realm-cyan/12 border-realm-cyan/30 text-realm-cyan" 
+                        : "bg-white/[0.03] border-white/10 text-white/40 hover:text-white"
                    )}
                  >
                    {t}
@@ -1656,9 +1663,9 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Recent Activity</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">What changed recently</h3>
+              <h3 className="mt-3 text-2xl font-semibold text-white">Signal feed</h3>
             </div>
-            <Activity size={18} className="text-realm-cyan" />
+            <Activity size={18} className="text-white/35" />
           </div>
 
           <div className="mt-8 space-y-4">
@@ -1683,9 +1690,9 @@ const Dashboard = ({ miningActive, sessionSecs, onToggleMining, onNavigate }: { 
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/35">Next Actions</p>
-              <h3 className="mt-3 text-2xl font-semibold text-white">Best next steps</h3>
+              <h3 className="mt-3 text-2xl font-semibold text-white">Priority queue</h3>
             </div>
-            <Bell size={18} className="text-realm-cyan" />
+            <Bell size={18} className="text-white/35" />
           </div>
 
           <div className="mt-8 space-y-3">
