@@ -77,6 +77,7 @@ app.use(session({
   secret: readEnv('SESSION_SECRET') || 'supersecret-session-key',
   resave: false,
   saveUninitialized: false,
+  rolling: true,
   store: new PrismaSessionStore(
     prisma,
     {

@@ -1,0 +1,41 @@
+{
+  "name": "realmxai-remotion-video",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts REALMxAICommercialWide out/realmxai-commercial-wide.mp4",
+    "render:wide": "remotion render src/index.ts REALMxAICommercialWide out/realmxai-commercial-wide.mp4",
+    "render:obsidian": "remotion render src/index.ts REALMxAIObsidian out/realmxai-commercial-obsidian.mp4",
+    "render:velocity": "remotion render src/index.ts REALMxAIVelocity out/realmxai-commercial-velocity.mp4",
+    "render:atlas": "remotion render src/index.ts REALMxAIAtlas out/realmxai-commercial-atlas.mp4",
+    "render:pastel-v3": "remotion render src/index.ts REALMxAIPastelV3 out/realmxai-pastel-v3.mp4",
+    "render:flagship-v2": "remotion render src/index.ts REALMxAIFlagshipV2 out/realmxai-flagship-v2.mp4",
+    "render:community": "remotion render src/index.ts REALMxAICommunity out/realmxai-community.mp4",
+    "render:keynote": "remotion render src/index.ts REALMxAIKeynote out/realmxai-keynote.mp4",
+    "render:collage": "remotion render src/index.ts REALMxAICollage out/realmxai-collage.mp4",
+    "render:clean": "remotion render src/index.ts REALMxAIClean out/realmxai-clean.mp4",
+    "render:terminal": "remotion render src/index.ts REALMxAITerminal out/realmxai-terminal.mp4",
+    "render:indigo": "remotion render src/index.ts REALMxAIIndigo out/realmxai-indigo.mp4",
+    "render:editorial": "remotion render src/index.ts REALMxAIEditorial out/realmxai-editorial.mp4",
+    "render:pastel-spec": "remotion render src/index.ts REALMxAIPastelSpec out/realmxai-pastel-spec.mp4",
+    "render:node-flow": "remotion render src/index.ts REALMxAINodeFlow out/realmxai-node-flow.mp4",
+    "render:genesis-film": "remotion render src/index.ts REALMxAIGenesisFilm out/realmxai-genesis-film.mp4",
+    "render:flagship-story": "remotion render src/index.ts REALMxAIFlagshipStory out/realmxai-flagship-story.mp4",
+    "render:clarity": "remotion render src/index.ts REALMxAIClarity out/realmxai-clarity.mp4",
+    "render:narrative": "remotion render src/index.ts REALMxAINarrative out/realmxai-narrative.mp4",
+    "render:momentum": "remotion render src/index.ts REALMxAIMomentum out/realmxai-momentum.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.441",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "4.0.441"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "typescript": "^5.8.2"
+  }
+}

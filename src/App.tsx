@@ -55,55 +55,6 @@ type SessionUser = {
   username?: string;
 } | null;
 
-type UploadedSmoothScrollInstance = {
-  addItems?: () => UploadedSmoothScrollInstance;
-};
-
-type UploadedSmoothScrollConstructor = new (options: {
-  target: HTMLElement;
-  scrollEase?: number;
-  maxOffset?: number;
-}) => UploadedSmoothScrollInstance;
-
-let uploadedSmoothScrollPromise: Promise<UploadedSmoothScrollConstructor | null> | null = null;
-
-function loadUploadedSmoothScroll(): Promise<UploadedSmoothScrollConstructor | null> {
-  if (typeof window === 'undefined') {
-    return Promise.resolve(null);
-  }
-
-  const smoothScrollWindow = window as typeof window & {
-    SmoothScroll?: UploadedSmoothScrollConstructor;
-  };
-
-  if (smoothScrollWindow.SmoothScroll) {
-    return Promise.resolve(smoothScrollWindow.SmoothScroll);
-  }
-
-  if (uploadedSmoothScrollPromise) {
-    return uploadedSmoothScrollPromise;
-  }
-
-  uploadedSmoothScrollPromise = new Promise((resolve, reject) => {
-    const existingScript = document.querySelector<HTMLScriptElement>('script[data-uploaded-smooth-scroll="true"]');
-    if (existingScript) {
-      existingScript.addEventListener('load', () => resolve(smoothScrollWindow.SmoothScroll ?? null), { once: true });
-      existingScript.addEventListener('error', () => reject(new Error('Failed to load uploaded smooth scroll script.')), { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = '/SmoothScroll-main/js/SmoothScroll.min.js';
-    script.async = true;
-    script.dataset.uploadedSmoothScroll = 'true';
-    script.onload = () => resolve(smoothScrollWindow.SmoothScroll ?? null);
-    script.onerror = () => reject(new Error('Failed to load uploaded smooth scroll script.'));
-    document.head.appendChild(script);
-  });
-
-  return uploadedSmoothScrollPromise;
-}
-
 const WalletConnectControl = React.lazy(async () => {
   try {
     const rm = await import('@rainbow-me/rainbowkit');
@@ -538,6 +489,18 @@ import {
   Area
 } from 'recharts';
 import { cn } from './lib/utils';
+import { AppShell } from '@/components/app/app-shell';
+import { FeedbackBanner } from '@/components/app/feedback-banner';
+import { normalizeTab, type AppTabId } from '@/lib/navigation';
+
+const DashboardWorkspace = React.lazy(() => import('@/pages/dashboard-page'));
+const TasksWorkspace = React.lazy(() => import('@/pages/tasks-page'));
+const SettingsWorkspace = React.lazy(() => import('@/pages/settings-page'));
+
+type WorkspaceFeedback = {
+  type: 'success' | 'error' | 'info';
+  text: string;
+} | null;
 
 const ANALYTICS_DATA: any[] = [];
 
@@ -4323,20 +4286,27 @@ const AuthGateScreen = ({ loading }: { loading: boolean }) => {
 };
 
 
-function AuthenticatedApp() {
-  const [activeTab, setActiveTab] = useState(() => {
-    const tab = new URLSearchParams(window.location.search).get('tab');
-    const allowedTabs = new Set(['dashboard', 'leaderboard', 'node', 'mining', 'wallet', 'tasks', 'referrals', 'profile', 'settings']);
-    return tab && allowedTabs.has(tab) ? tab : 'dashboard';
-  });
-  // ---- Shared Mining Session State ----
+function AuthenticatedApp({ initialUser }: { initialUser: SessionUser }) {
+  const [activeTab, setActiveTab] = useState<AppTabId>(() =>
+    normalizeTab(new URLSearchParams(window.location.search).get('tab')),
+  );
   const [miningActive, setMiningActive] = useState<boolean>(() => isSessionActive());
   const [sessionSecs, setSessionSecs] = useState<number>(() => getSessionElapsed());
-  const [parallaxOffset, setParallaxOffset] = useState(0);
-  const [smoothScrollReady, setSmoothScrollReady] = useState(false);
-  const smoothScrollViewportRef = useRef<HTMLDivElement>(null);
-  const smoothScrollContainerRef = useRef<HTMLElement>(null);
-  const smoothScrollEnabledRef = useRef(false);
+  const [workspaceFeedback, setWorkspaceFeedback] = useState<WorkspaceFeedback>(null);
+
+  const shellUserLabel = initialUser?.username
+    ? `@${initialUser.username}`
+    : initialUser?.name
+      ? initialUser.name
+      : initialUser?.email
+        ? initialUser.email
+        : initialUser?.walletAddress
+          ? `${initialUser.walletAddress.slice(0, 6)}...${initialUser.walletAddress.slice(-4)}`
+          : 'REALMxAI operator';
+
+  const handleTabChange = (tab: AppTabId) => {
+    setActiveTab(tab);
+  };
 
   useEffect(() => {
     const pendingReferralCode = getPendingReferralCode();
@@ -4447,40 +4417,73 @@ function AuthenticatedApp() {
   }, []);
 
   useEffect(() => {
+    const handlePopState = () => {
+      const nextTab = new URLSearchParams(window.location.search).get('tab');
+      setActiveTab(normalizeTab(nextTab));
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('tab') !== activeTab) {
+      url.searchParams.set('tab', activeTab);
+      window.history.replaceState({}, '', url.toString());
+    }
+
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!workspaceFeedback) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setWorkspaceFeedback(null), 4200);
+    return () => window.clearTimeout(timeoutId);
+  }, [workspaceFeedback]);
+
+  useEffect(() => {
     if (!miningActive) return;
     const timer = setInterval(() => {
-      setSessionSecs(prev => {
+      setSessionSecs((prev) => {
         const next = prev + 1;
-        
-        // Hourly distribution check
+
         if (next % 3600 === 0 && next > 0) {
           const syncMining = async () => {
-             const API_URL = '';
-             await fetch(`${API_URL}/api/mining/sync`, {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ sessionSeconds: next }),
-               credentials: 'include'
-             });
+            const API_URL = '';
+            await fetch(`${API_URL}/api/mining/sync`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionSeconds: next }),
+              credentials: 'include',
+            });
           };
           syncMining();
         }
 
         if (next >= SESSION_DURATION) {
-          // Session expired
           setMiningActive(false);
           localStorage.removeItem('realmx_mining_session');
-          
-          // Final sync
+
           const finalSync = async () => {
             const API_URL = '';
             await fetch(`${API_URL}/api/mining/sync`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ sessionSeconds: SESSION_DURATION, stopMining: true }),
-              credentials: 'include'
+              credentials: 'include',
             });
             window.dispatchEvent(new Event('balance-updated'));
+            setWorkspaceFeedback({
+              type: 'info',
+              text: 'Mining session completed and synced to your wallet balance.',
+            });
           };
           finalSync();
 
@@ -4491,132 +4494,6 @@ function AuthenticatedApp() {
     }, 1000);
     return () => clearInterval(timer);
   }, [miningActive]);
-
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const viewport = smoothScrollViewportRef.current;
-    const container = smoothScrollContainerRef.current;
-    if (!viewport || !container) return;
-
-    const mediaQuery = window.matchMedia('(max-width: 767px), (prefers-reduced-motion: reduce)');
-    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    if (mediaQuery.matches || isTouchDevice) {
-      smoothScrollEnabledRef.current = false;
-      setSmoothScrollReady(false);
-      return;
-    }
-
-    let cancelled = false;
-    let resizeObserver: ResizeObserver | null = null;
-
-    const activateSmoothScroll = async () => {
-      try {
-        const SmoothScroll = await loadUploadedSmoothScroll();
-        if (cancelled || !SmoothScroll) return;
-
-        smoothScrollEnabledRef.current = true;
-        setSmoothScrollReady(true);
-
-        const instance = new SmoothScroll({
-          target: container,
-          scrollEase: 0.08,
-          maxOffset: 220,
-        });
-
-        instance.addItems?.();
-        window.dispatchEvent(new Event('resize'));
-
-        resizeObserver = new ResizeObserver(() => {
-          window.dispatchEvent(new Event('resize'));
-        });
-        resizeObserver.observe(container);
-      } catch (error) {
-        console.error('[REALMxAI] Failed to enable uploaded smooth scroll:', error);
-      }
-    };
-
-    void activateSmoothScroll();
-
-    return () => {
-      cancelled = true;
-      resizeObserver?.disconnect();
-      smoothScrollEnabledRef.current = false;
-      setSmoothScrollReady(false);
-      container.style.transform = '';
-      document.body.style.height = '';
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!smoothScrollEnabledRef.current || typeof window === 'undefined') return;
-
-    const rafId = window.requestAnimationFrame(() => {
-      window.dispatchEvent(new Event('resize'));
-    });
-
-    return () => window.cancelAnimationFrame(rafId);
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const mediaQuery = window.matchMedia('(max-width: 767px), (prefers-reduced-motion: reduce)');
-    let rafId = 0;
-
-    const updateOffset = () => {
-      if (mediaQuery.matches) {
-        setParallaxOffset(0);
-        return;
-      }
-
-      setParallaxOffset(window.scrollY || window.pageYOffset || 0);
-    };
-
-    const handleScroll = () => {
-      if (rafId) return;
-
-      rafId = window.requestAnimationFrame(() => {
-        rafId = 0;
-        updateOffset();
-      });
-    };
-
-    const handleMediaChange = () => {
-      if (rafId) {
-        window.cancelAnimationFrame(rafId);
-        rafId = 0;
-      }
-      updateOffset();
-    };
-
-    updateOffset();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleMediaChange);
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener('change', handleMediaChange);
-    } else {
-      mediaQuery.addListener(handleMediaChange);
-    }
-
-    return () => {
-      if (rafId) {
-        window.cancelAnimationFrame(rafId);
-      }
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleMediaChange);
-      if (mediaQuery.removeEventListener) {
-        mediaQuery.removeEventListener('change', handleMediaChange);
-      } else {
-        mediaQuery.removeListener(handleMediaChange);
-      }
-    };
-  }, []);
-
 
   const handleMiningAction = async () => {
     if (miningActive) {
@@ -4636,8 +4513,15 @@ function AuthenticatedApp() {
         setSessionSecs(0);
         localStorage.removeItem('realmx_mining_session');
         window.dispatchEvent(new Event('balance-updated'));
+        setWorkspaceFeedback({
+          type: 'success',
+          text: 'Mining stopped cleanly and the latest session reward was synced.',
+        });
       } catch (e: any) {
-        alert(e?.message || 'Failed to stop mining session.');
+        setWorkspaceFeedback({
+          type: 'error',
+          text: e?.message || 'Failed to stop mining session.',
+        });
       }
       return;
     }
@@ -4658,66 +4542,93 @@ function AuthenticatedApp() {
       setMiningActive(true);
       setSessionSecs(0);
       saveMiningSession({ startedAt: now, active: true });
+      setWorkspaceFeedback({
+        type: 'success',
+        text: 'Mining session started. The six-hour timer is now live.',
+      });
     } catch (e: any) {
-      alert(e?.message || 'Failed to start mining session.');
+      setWorkspaceFeedback({
+        type: 'error',
+        text: e?.message || 'Failed to start mining session.',
+      });
+    }
+  };
+
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return (
+          <DashboardWorkspace
+            miningActive={miningActive}
+            sessionSecs={sessionSecs}
+            onToggleMining={handleMiningAction}
+            onNavigate={handleTabChange}
+          />
+        );
+      case 'leaderboard':
+        return <Leaderboard />;
+      case 'node':
+        return <NodePage />;
+      case 'mining':
+        return <MiningPage miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} />;
+      case 'wallet':
+        return <WalletPage />;
+      case 'tasks':
+        return <TasksWorkspace onNavigate={handleTabChange} />;
+      case 'referrals':
+        return <ReferralsPage />;
+      case 'profile':
+        return <Profile />;
+      case 'settings':
+        return <SettingsWorkspace />;
+      default:
+        return null;
     }
   };
 
   return (
     <div className="min-h-screen bg-realm-black selection:bg-realm-cyan selection:text-realm-black overflow-x-hidden">
-      {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div
-          className="absolute -top-32 right-[4%] h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(47,230,210,0.14)_0%,rgba(47,230,210,0.07)_32%,transparent_72%)] blur-3xl will-change-transform"
-          style={{ transform: `translate3d(0, ${Math.round(parallaxOffset * 0.14)}px, 0)` }}
+          className="absolute -top-24 right-[4%] h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(47,230,210,0.12)_0%,rgba(47,230,210,0.06)_34%,transparent_72%)] blur-3xl"
         />
         <div
-          className="absolute left-[-9rem] top-[28%] h-[22rem] w-[22rem] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.10)_0%,rgba(255,255,255,0.03)_36%,transparent_72%)] blur-3xl will-change-transform"
-          style={{ transform: `translate3d(0, ${Math.round(parallaxOffset * -0.08)}px, 0)` }}
+          className="absolute left-[-8rem] top-[24%] h-[20rem] w-[20rem] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.09)_0%,rgba(255,255,255,0.02)_36%,transparent_70%)] blur-3xl"
         />
-        <div
-          className="absolute inset-x-0 top-0 h-64 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent)] will-change-transform"
-          style={{ transform: `translate3d(0, ${Math.round(parallaxOffset * 0.05)}px, 0)` }}
-        />
+        <div className="absolute inset-x-0 top-0 h-64 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent)]" />
         <div className="absolute inset-0 grid-distortion opacity-20" />
       </div>
 
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-      <TopBar onNavigate={(t) => setActiveTab(t)} />
+      <AppShell activeTab={activeTab} onTabChange={handleTabChange} userLabel={shellUserLabel}>
+        {workspaceFeedback ? (
+          <div className="mb-6">
+            <FeedbackBanner tone={workspaceFeedback.type} message={workspaceFeedback.text} title="Workspace update" />
+          </div>
+        ) : null}
 
-      <div
-        ref={smoothScrollViewportRef}
-        className={smoothScrollReady ? 'fixed inset-0 overflow-hidden' : undefined}
-      >
-        <main
-          ref={smoothScrollContainerRef}
-          className={`pl-0 md:pl-64 pt-20 min-h-screen ${smoothScrollReady ? 'w-full' : ''}`}
+        <Suspense
+          fallback={
+            <div className="glass-panel flex min-h-[320px] items-center justify-center rounded-[32px]">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-realm-cyan border-t-transparent" />
+            </div>
+          }
         >
-          <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8 xl:py-10">
+          <div className="mx-auto max-w-[1120px]">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
+                transition={{ duration: 0.26, ease: 'easeOut' }}
               >
-                {activeTab === 'dashboard' && <Dashboard miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} onNavigate={(t) => setActiveTab(t)} />}
-                {activeTab === 'leaderboard' && <Leaderboard />}
-                {activeTab === 'node' && <NodePage />}
-                {activeTab === 'mining' && <MiningPage miningActive={miningActive} sessionSecs={sessionSecs} onToggleMining={handleMiningAction} />}
-                {activeTab === 'wallet' && <WalletPage />}
-                {activeTab === 'tasks' && <TasksPageV2 onNavigate={(t) => setActiveTab(t)} />}
-                {activeTab === 'referrals' && <ReferralsPage />}
-                {activeTab === 'profile' && <Profile />}
-                {activeTab === 'settings' && <SettingsPage />}
+                {renderActiveTab()}
               </motion.div>
             </AnimatePresence>
           </div>
-        </main>
-      </div>
+        </Suspense>
+      </AppShell>
 
-      {/* Cinematic Grain Overlay */}
       <div className="fixed inset-0 pointer-events-none z-[100] opacity-[0.03] mix-blend-overlay">
         <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
           <filter id="noiseFilter">
@@ -4781,5 +4692,5 @@ export default function App() {
     return <AuthGateScreen loading={false} />;
   }
 
-  return <AuthenticatedApp />;
+  return <AuthenticatedApp initialUser={authUser} />;
 }

@@ -55,7 +55,7 @@ router.get('/leaderboard', async (req, res) => {
   try {
     const topUsers = await prisma.user.findMany({
       orderBy: { points: 'desc' },
-      take: 50,
+      take: 100,
       select: {
         id: true,
         username: true,
